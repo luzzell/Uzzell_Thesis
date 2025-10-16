@@ -1,0 +1,84 @@
+﻿date,year,Bay,habitat,quadrat_code,transect_width,species,species_consolidated,sap_tree,dbh_cm,surv,rep,notes
+1/23/23,2023,Otter,fringe,OCS1,2,AVGE,AVGE,Tree,3.76,A,NA,"HEALTHY, HERBIV"
+1/23/23,2023,Otter,fringe,OCS1,2,RHMA,RHMA,Tree,7.32,A,IP,"HEALTHY, HERBIV"
+1/23/23,2023,Otter,fringe,OCS1,2,RHMA,RHMA,Tree,6.3,A,IP,"HEALTHY, HERBIV"
+1/23/23,2023,Otter,fringe,OCS2,2,LARA,LARA,Tree,4.01,A,NA,HERBIV
+1/23/23,2023,Otter,fringe,OCS2,2,LARA,LARA,Tree,7.07,A,NA,
+1/23/23,2023,Otter,fringe,OCS2,2,LARA,LARA,Tree,12.03,A,NA,"LEADER DEAD, BASE STILL ALIVE"
+1/23/23,2023,Otter,fringe,OCS2,2,LARA,LARA,Tree,6.94,A,NA,"LEADER DEAD, BASE STILL ALIVE"
+1/23/23,2023,Otter,fringe,OCS2,2,RHMA,RHMA,Tree,5.86,A,IP,HEALTHY
+1/23/23,2023,Otter,fringe,OCS2,2,RHMA,RHMA,Tree,6.81,A,F,HEALTHY
+1/23/23,2023,Otter,fringe,OCS2,2,RHMA,RHMA,Tree,5.47,A,NA,
+1/23/23,2023,Otter,fringe,OCS2,2,RHMA,RHMA,Tree,6.11,A,NA,
+1/23/23,2023,Otter,fringe,OCS2,2,RHMA,RHMA,Tree,10.06,A,IP,
+1/23/23,2023,Otter,fringe,OCS2,2,RHMA,RHMA,Tree,4.46,A,NA,
+1/23/23,2023,Otter,fringe,OCS3,2,LARA,LARA,Tree,4.33,A,N,HERBIV
+1/23/23,2023,Otter,fringe,OCS3,2,LARA,LARA,Tree,11.52,A,N,LEADER BROKEN
+1/23/23,2023,Otter,fringe,OCS3,2,RHMA,RHMA,Tree,5.22,A,"F, IP",HEALTHY
+1/23/23,2023,Water,fringe,WCS1,2,RHMA,RHMA,Tree,10.5,A,N,"SOME DEAD BRANCHES, HERBIV"
+1/23/23,2023,Water,fringe,WCS1,2,RHMA,RHMA,Tree,12.8,A,N,"SOME DEAD BRANCHES, HERBIV"
+1/23/23,2023,Water,fringe,WCS1,2,RHMA,RHMA,Tree,7.13,A,N,"HEALTHY, HERBIV"
+1/23/23,2023,Water,fringe,WCS1,2,RHMA,RHMA,Tree,9.1,A,F,"HEALTHY, HERBIV"
+1/23/23,2023,Water,fringe,WCS3,2,RHMA1,RHMA,Sapling,1.24,A,NA,#195
+1/23/23,2023,Water,fringe,WCS3,2,RHMA1,RHMA,Tree,2.51,A,NA,
+1/23/23,2023,Water,fringe,WCS3,2,RHMA2,RHMA,Sapling,1.41,A,NA,
+1/23/23,2023,Water,fringe,WCS3,2,RHMA2,RHMA,Sapling,1.2,A,NA,
+1/23/23,2023,Water,fringe,WCS3,2,RHMA2,RHMA,Sapling,0.97,A,NA,
+1/23/23,2023,Water,fringe,WCS3,2,RHMA2,RHMA,Sapling,1.25,A,NA,
+1/23/23,2023,Water,debris,WCU1,2,LARA,LARA,Tree,4.39,A,N,HERB
+1/23/23,2023,Water,debris,WCU3,2,LARA1,LARA,Sapling,0.85,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA1,LARA,Sapling,1.82,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA1,LARA,Sapling,1.09,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA1,LARA,Sapling,1.82,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA1,LARA,Sapling,0.92,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA1,LARA,Tree,2.66,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA2,LARA,Sapling,1.94,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA2,LARA,Sapling,1.41,A,NA,
+1/23/23,2023,Water,debris,WCU3,2,LARA2,LARA,Tree,2.58,A,NA,
+2/13/24,2024,Otter,fringe,OCS1,4,AVGE,AVGE,Tree,9.91,A,N,
+2/13/24,2024,Otter,fringe,OCS1,4,AVGE,AVGE,Tree,10.41,A,N,
+2/13/24,2024,Otter,fringe,OCS1,4,AVGE,AVGE,Tree,16.76,A,N,
+2/13/24,2024,Otter,fringe,OCS1,4,RHMA,RHMA,Tree,20.57,A,N,
+2/13/24,2024,Otter,fringe,OCS1,4,RHMA,RHMA,Tree,6.6,A,N,
+2/13/24,2024,Otter,fringe,OCS1,4,RHMA,RHMA,Tree,15.49,A,N,
+2/13/24,2024,Otter,fringe,OCS2,4,RHMA,RHMA,Tree,7.37,A,N,
+2/13/24,2024,Otter,fringe,OCS3,4,LARA,LARA,Tree,9.4,A,N,
+2/13/24,2024,Otter,fringe,OCS3,4,LARA,LARA,Tree,26.92,A,N,
+2/13/24,2024,Otter,fringe,OCS3,4,RHMA,RHMA,Tree,18.03,A,IP,
+2/13/24,2024,Otter,fringe,OCS3,4,RHMA,RHMA,Tree,11.43,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,7.62,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,8.64,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,7.62,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,23.62,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,12.95,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,6.86,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,11.43,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,19.3,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,6.35,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,7.62,A,N,
+2/13/24,2024,Otter,debris,OCU2,4,RHMA,RHMA,Tree,10.16,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,22.1,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,9.91,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,14.73,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,23.37,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,13.97,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,29.21,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,9.65,A,N,
+2/13/24,2024,Water,fringe,WCS1,4,RHMA,RHMA,Tree,20.32,A,N,
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Tree,19.81,A,N,
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Tree,8.64,A,N,
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Tree,9.4,A,N,
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Tree,8.13,A,N,
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Tree,8.38,A,N,
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Tree,11.43,A,N,
+2/13/24,2024,Water,debris,WCU1,4,LARA,LARA,Tree,9.14,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA1,LARA,Tree,14.22,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA1,LARA,Tree,13.21,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA1,LARA,Tree,6.1,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA1,LARA,Tree,6.35,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA1,LARA,Tree,11.68,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA1,LARA,Tree,22.35,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA2,LARA,Tree,10.16,A,N,
+2/13/24,2024,Water,debris,WCU3,4,LARA2,LARA,Tree,13.97,A,N,
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Sapling,0,A,N,not at dbh
+2/13/24,2024,Water,fringe,WCS3,4,RHMA,RHMA,Sapling,0,A,N,not at dbh

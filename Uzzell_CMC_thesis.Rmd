@@ -1,0 +1,4922 @@
+---
+title: "Hurricane_Hole_Natural_Recovery"
+author: "Lila Uzzell"
+date: "2025-10-16"
+output: github_document
+---
+
+#Setup & load Libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
+library(colorspace)
+library(scales)
+library(lme4)
+library(writexl)
+library(survival)
+library(patchwork)
+library(vegan)
+library(dunn.test)
+library(ggtext)
+library(emmeans)
+library(survminer)
+library(lubridate)
+library(tidyr)
+library(dplyr)
+```
+
+##R.mangle Table Setup
+
+```{r}
+head(R_Mangle_Seedling_Data_FULL)
+```
+
+
+```{r}
+#add survivorship. "1" = dead, "0" = alive
+#Since we will be looking at survivorship, add a column for Alive ("0") and Dead ("1") binomials
+mang_data <- R_Mangle_Seedling_Data_FULL %>% 
+  mutate(binom.surv = ifelse(Surv_Sum == "A", 0, 1))
+
+View(mang_data)
+```
+
+```{r}
+mang_data$MonitoringPeriod = as.character(mang_data$MonitoringPeriod)
+str(mang_data)
+```
+
+
+```{r}
+#This study had repeated site visits over time. Once we revisited sites, new mangrove seedlings would appear in plots. We would tag new seedlings and monitor them. We tried to revisit sites every 4 months for 1 year, but the EXACT time in days between each monitoring period was NOT the same. Since seedling monitoring time varied throughout the study, we need to account for this by adding a column for the total number of days each seedling was tracked for throughout the study so that we can calculate and compare the Percent Change in Seedling Height Overall (in Days). We will start by adding the total number of days of each seedling was tracked for:
+mang_data <- mang_data %>% 
+  mutate(TotalDays = case_when(
+    TrackingPeriod == "Primary" & MonitoringPeriod == 1 ~ 0,
+    TrackingPeriod == "Primary" & MonitoringPeriod == 2 ~ 70,
+    TrackingPeriod == "Primary" & MonitoringPeriod == 3 ~ 213,
+    TrackingPeriod == "Primary" & MonitoringPeriod == 4 ~ 386,
+    TrackingPeriod == "Secondary" & MonitoringPeriod == 2 ~ 0,
+    TrackingPeriod == "Secondary" & MonitoringPeriod == 3 ~ 144,
+    TrackingPeriod == "Secondary" & MonitoringPeriod == 4 ~ 317,
+    TrackingPeriod == "Tertiary" & MonitoringPeriod == 3 ~ 0,
+    TrackingPeriod == "Tertiary" & MonitoringPeriod == 4 ~ 174,
+    TrackingPeriod == "Quaternary" & MonitoringPeriod == 4 ~ 0,
+    TRUE ~ NA
+    
+  ))
+```
+
+```{r}
+# lets characterize the total days into time periods too (i.e. Jan23-Apr23, Apr23-Feb24)
+mang_data <- mang_data %>% 
+  mutate(MonitoringChunk = case_when(
+    TrackingPeriod == "Primary" & MonitoringPeriod == 1 ~ "Jan23",
+    TrackingPeriod == "Primary" & MonitoringPeriod == 2 ~ "Jan23-Apr23",
+    TrackingPeriod == "Primary" & MonitoringPeriod == 3 ~ "Jan23-Aug23",
+    TrackingPeriod == "Primary" & MonitoringPeriod == 4 ~ "Jan23-Feb24",
+    TrackingPeriod == "Secondary" & MonitoringPeriod == 2 ~ "Apr23",
+    TrackingPeriod == "Secondary" & MonitoringPeriod == 3 ~ "Apr23-Aug23",
+    TrackingPeriod == "Secondary" & MonitoringPeriod == 4 ~ "Apr23-Feb24",
+    TrackingPeriod == "Tertiary" & MonitoringPeriod == 3 ~ "Aug23",
+    TrackingPeriod == "Tertiary" & MonitoringPeriod == 4 ~ "Aug23-Feb24",
+    TrackingPeriod == "Quaternary" & MonitoringPeriod == 4 ~ "Feb24",
+    TRUE ~ NA
+    
+  ))
+```
+
+```{r}
+# Calculate percent change in height over time for each tag_id
+mang_data <- mang_data %>%
+  group_by(Tag) %>%
+  arrange(TotalDays) %>%  # data is sorted by Days
+  mutate(
+    Height_Change = Height - lag(Height), 
+    Time_Change = TotalDays - lag(TotalDays),  
+    Percent_Change = (Height_Change / lag(Height)) * 100,  
+    Percent_Change_Per_Day = Percent_Change / Time_Change  
+  ) %>%
+  ungroup()
+
+
+print(mang_data)
+```
+
+```{r}
+#Add number of months
+mang_data <- mang_data %>% 
+  mutate(NumberMonths = case_when(
+    MonitoringChunk == "Jan23" ~ 0,
+    MonitoringChunk == "Jan23-Apr23" ~4,
+    MonitoringChunk == "Jan23-Aug23"~ 8,
+    MonitoringChunk == "Jan23-Feb24"~ 12,
+    MonitoringChunk == "Apr23" ~ 0,
+    MonitoringChunk == "Apr23-Aug23"~ 4,
+    MonitoringChunk == "Apr23-Feb24"~ 8,
+    MonitoringChunk == "Aug23" ~ 0,
+    MonitoringChunk == "Aug23-Feb24"~ 4,
+    MonitoringChunk == "Feb24" ~ 0,
+    TRUE ~ NA
+    
+  ))
+```
+
+```{r}
+#remove Tag 595 bc not an understory sapling (Tag 595 was greater than 150 cm [this is here because when initially monitored this, we were figuring out the project specifications])
+mang_data <- subset(mang_data, Tag != 595)
+```
+
+```{r}
+#make a quadrat_code column
+mang_data <- mang_data %>%
+  mutate(quadrat_code = paste0(
+    case_when(
+      Bay == "Otter" ~ "OC",
+      Bay == "Water" ~ "WC",
+      TRUE ~ NA_character_  # Handles unexpected values
+    ),
+    Quadrat
+  ))
+```
+
+#*RQ1: Has the abundance of red mangroves increased in the years following Hurricanes Irma and Maria?
+
+##*Overall mangrove (trees and saplings) basal area and density by year for each species. Mann-Whitney U Test.
+
+### Table Setup
+
+```{r}
+#add in zero data and calculate density & basal area
+mang_trees2$Bay <- as.factor(mang_trees2$Bay)
+mang_trees2$habitat <- as.factor(mang_trees2$habitat)
+mang_trees2$year <- as.factor(mang_trees2$year)
+mang_trees2$quadrat_code <- as.factor(mang_trees2$quadrat_code)
+mang_trees2$species_consolidated <- as.factor(mang_trees2$species_consolidated)
+mang_trees2$species <- as.factor(mang_trees2$species)
+mang_trees2$sap_tree <- as.factor(mang_trees2$sap_tree)
+str(mang_trees2)
+```
+
+```{r}
+tree_mang_count2 <- mang_trees2 %>%
+  group_by(year, Bay, habitat, quadrat_code, species_consolidated, sap_tree) %>%
+  summarise(count = n (), .groups = "drop")
+
+```
+
+```{r}
+all_combos2 <- all_quadrats_ref %>%
+  crossing(
+    species_consolidated = unique(mang_trees2$species_consolidated),
+    sap_tree = unique(mang_trees2$sap_tree),
+    year = unique(mang_trees2$year),
+  )
+```
+
+```{r}
+year_width <- tibble(
+  year = c(2023, 2024),
+  transect_width = c(2, 4)
+)
+
+#Use crossing only on the other variables
+all_combos2 <- year_width %>%
+  crossing(
+    all_quadrats_ref,
+    species_consolidated = unique(mang_trees2$species_consolidated),
+    sap_tree = unique(mang_trees2$sap_tree)
+  )
+```
+
+```{r}
+all_combos2 <- all_combos2 %>%
+  rename(habitat = Habitat)
+```
+
+```{r}
+all_combos2$Bay <- as.factor(all_combos2$Bay)
+all_combos2$habitat <- as.factor(all_combos2$habitat)
+all_combos2$year <- as.factor(all_combos2$year)
+all_combos2$quadrat_code <- as.factor(all_combos2$quadrat_code)
+all_combos2$species_consolidated <- as.factor(all_combos2$species_consolidated)
+all_combos2$sap_tree <- as.factor(all_combos2$sap_tree)
+```
+
+
+```{r}
+full_tree_counts2 <- all_combos2 %>%
+  left_join(tree_mang_count2, by = c("year", "Bay", "habitat", "quadrat_code", "species_consolidated", "sap_tree")) %>%
+  mutate(count = replace_na(count, 0))
+```
+
+```{r}
+mean_dbh <- mang_trees2 %>%
+  group_by(year, Bay, habitat, quadrat_code, species_consolidated, sap_tree) %>%
+  summarise(mean_dbh_cm = mean(dbh_cm, na.rm = TRUE),
+    .groups = "drop")
+```
+
+```{r}
+full_tree_counts2 <- full_tree_counts2 %>%
+  left_join(mean_dbh, by = c("year", "Bay", "habitat", "quadrat_code", "species_consolidated", "sap_tree"))
+
+```
+
+```{r}
+full_tree_counts2 <- full_tree_counts2 %>% select(-area)
+```
+
+```{r}
+full_tree_counts2 <- full_tree_counts2 %>%
+  mutate(
+    area_m2 = transect_length_m*transect_width,
+    hectare = area_m2 / 10000,
+    mean_ba_m2 = pi * (mean_dbh_cm^2) / 40000,            
+    mean_ba_per_ha = mean_ba_m2 / hectare                 
+  )
+```
+
+```{r}
+full_tree_counts2 <- full_tree_counts2 %>%
+  replace_na(list(mean_ba_m2 = 0, mean_ba_per_ha = 0, mean_dbh_cm = 0))
+```
+
+```{r}
+full_tree_counts2 <- full_tree_counts2 %>%
+  mutate(
+    density_per_m2 = count / area_m2,
+    density_per_ha = count / hectare              
+  )
+```
+
+```{r}
+# Normality
+
+shapiro.test(full_tree_counts2$density_per_ha)
+# sig, NOT NORM
+shapiro.test(full_tree_counts2$mean_ba_per_ha)
+# sig, NOT NORM
+```
+
+###By Year
+####Stat
+
+```{r}
+wilcox.test(density_per_ha ~ year, data = full_tree_counts2)
+wilcox.test(mean_ba_per_ha ~ year, data = full_tree_counts2)
+
+# Not Sig
+```
+
+###By Bay
+####Stat
+
+```{r}
+wilcox.test(density_per_ha ~ Bay, data = full_tree_counts2)
+wilcox.test(mean_ba_per_ha ~ Bay, data = full_tree_counts2)
+
+# Not Sig
+```
+
+
+###By Habitat
+####Stat
+```{r}
+wilcox.test(density_per_ha ~ habitat, data = full_tree_counts2)
+# W = 2204, p-value = 0.01519
+wilcox.test(mean_ba_per_ha ~ habitat, data = full_tree_counts2)
+#W = 2221, p-value = 0.01804
+```
+
+
+####Graph
+
+```{r}
+#plot for basal area
+basal.hab.plot.summary <- full_tree_counts2 %>%
+  group_by(habitat) %>% 
+  summarise(
+    mean = mean(mean_ba_per_ha),  
+    sd = sd(mean_ba_per_ha),     
+    sample_size = n(), 
+    total = sum(mean_ba_per_ha),
+    se = sd / sqrt(n())
+    
+  )
+
+print(basal.hab.plot.summary)
+```
+
+
+```{r}
+basal.hab.plot.summary <- basal.hab.plot.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  # Position labels at ymax or ymin
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  # Adjust vjust based on bar direction
+    labels = c("a", "b")
+  )
+print(basal.hab.plot.summary)
+```
+
+
+```{r}
+plot.basal.hab <- ggplot(basal.hab.plot.summary, aes(x = habitat, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "coral4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = basal.hab.plot.summary$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 1.5)) +
+  labs(
+    title = "",
+    x = "",
+    y = "Mean Basal Area (m²/ha) ± SEM "
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.basal.hab
+```
+
+```{r}
+#plot for density
+density.hab.plot.summary <- full_tree_counts2 %>%
+  group_by(habitat) %>% 
+  summarise(
+    mean = mean(density_per_ha),  
+    sd = sd(density_per_ha),     
+    sample_size = n(), 
+    total = sum(density_per_ha),
+    se = sd / sqrt(n())
+    
+  )
+
+print(density.hab.plot.summary)
+```
+
+
+```{r}
+density.hab.plot.summary <- density.hab.plot.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  # Position labels at ymax or ymin
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  # Adjust vjust based on bar direction
+    labels = c("a", "b")
+  )
+print(density.hab.plot.summary)
+```
+
+
+```{r}
+plot.density.hab <- ggplot(density.hab.plot.summary, aes(x = habitat, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "coral4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = density.hab.plot.summary$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 750)) +
+  labs(
+    title = "",
+    x = "",
+    y = "Mean Density (stems/ha) ± SEM "
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.density.hab
+```
+
+```{r}
+plot.density.hab + plot.basal.hab
+```
+###By Saplings and Trees
+####Stat
+```{r}
+wilcox.test(density_per_ha ~ sap_tree, data = full_tree_counts2)
+#W = 1991.5, p-value = 0.0001705
+wilcox.test(mean_ba_per_ha ~ sap_tree, data = full_tree_counts2)
+#W = 1924, p-value = 2.041e-05
+```
+
+####Graph
+```{r}
+#plot for basal area
+basal.type.plot.summary <- full_tree_counts2 %>%
+  group_by(sap_tree) %>% 
+  summarise(
+    mean = mean(mean_ba_per_ha),  
+    sd = sd(mean_ba_per_ha),     
+    sample_size = n(), 
+    total = sum(mean_ba_per_ha),
+    se = sd / sqrt(n())
+    
+  )
+
+print(basal.type.plot.summary)
+```
+
+
+```{r}
+basal.type.plot.summary <- basal.type.plot.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  # Position labels at ymax or ymin
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  # Adjust vjust based on bar direction
+    labels = c("a", "b")
+  )
+print(basal.type.plot.summary)
+```
+
+
+```{r}
+plot.basal.type <- ggplot(basal.type.plot.summary, aes(x = sap_tree, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "coral4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = basal.type.plot.summary$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 1.5)) +
+  labs(
+    title = "Stage Class",
+    x = "",
+    y = "Mean Basal Area (m²/ha) ± SEM "
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.basal.type
+```
+
+```{r}
+#plot for density
+density.type.plot.summary <- full_tree_counts2 %>%
+  group_by(sap_tree) %>% 
+  summarise(
+    mean = mean(density_per_ha),  
+    sd = sd(density_per_ha),     
+    sample_size = n(), 
+    total = sum(density_per_ha),
+    se = sd / sqrt(n())
+    
+  )
+
+print(density.type.plot.summary)
+```
+
+
+```{r}
+density.type.plot.summary <- density.type.plot.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  # Position labels at ymax or ymin
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  # Adjust vjust based on bar direction
+    labels = c("a", "b")
+  )
+print(density.type.plot.summary)
+```
+
+
+```{r}
+plot.density.type <- ggplot(density.type.plot.summary, aes(x = sap_tree, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "coral4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = density.type.plot.summary$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 750)) +
+  labs(
+    title = "Stage Class",
+    x = "",
+    y = "Mean Density (stems/ha) ± SEM "
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.density.type
+```
+
+```{r}
+plot.density.type + plot.basal.type
+```
+###By SPP
+####Stat
+```{r}
+kruskal.test(density_per_ha ~ species_consolidated, data = full_tree_counts2)
+#Kruskal-Wallis chi-squared = 9.6481, df = 2, p-value = 0.008034
+kruskal.test(mean_ba_per_ha ~ species_consolidated, data = full_tree_counts2)
+#Kruskal-Wallis chi-squared = 8.1143, df = 2, p-value = 0.0173
+```
+
+```{r}
+dunn.test(full_tree_counts2$density_per_ha, full_tree_counts2$species_consolidated, method = "bonferroni")
+```
+
+```{r}
+dunn.test(full_tree_counts2$mean_ba_per_ha, full_tree_counts2$species_consolidated, method = "bonferroni")
+```
+
+####Graph
+```{r}
+#plot for basal area
+basal.spp.plot.summary <- full_tree_counts2 %>%
+  group_by(species_consolidated) %>% 
+  summarise(
+    mean = mean(mean_ba_per_ha),  
+    sd = sd(mean_ba_per_ha),     
+    sample_size = n(), 
+    total = sum(mean_ba_per_ha),
+    se = sd / sqrt(n())
+    
+  )
+
+print(basal.spp.plot.summary)
+```
+
+
+```{r}
+basal.spp.plot.summary <- basal.spp.plot.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  # Position labels at ymax or ymin
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  # Adjust vjust based on bar direction
+    labels = c("a", "ab", "b")
+  )
+print(basal.spp.plot.summary)
+```
+
+
+```{r}
+plot.basal.spp <- ggplot(basal.spp.plot.summary, aes(x = species_consolidated, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "coral4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = basal.spp.plot.summary$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+    scale_x_discrete(label = c("AVGE"= "A. germinans", "LARA" = "L. racemosa", "RHMA" = "R. mangle"))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 1.5)) +
+  labs(
+    title = "Species",
+    x = "",
+    y = ""
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.basal.spp
+```
+
+```{r}
+#plot for density
+density.spp.plot.summary <- full_tree_counts2 %>%
+  group_by(species_consolidated) %>% 
+  summarise(
+    mean = mean(density_per_ha),  
+    sd = sd(density_per_ha),     
+    sample_size = n(), 
+    total = sum(density_per_ha),
+    se = sd / sqrt(n())
+    
+  )
+
+print(density.spp.plot.summary)
+```
+
+
+```{r}
+density.spp.plot.summary <- density.spp.plot.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  # Position labels at ymax or ymin
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  # Adjust vjust based on bar direction
+    labels = c("a", "ab", "b")
+  )
+print(density.spp.plot.summary)
+```
+
+
+```{r}
+plot.density.spp <- ggplot(density.spp.plot.summary, aes(x = species_consolidated, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "coral4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = density.spp.plot.summary$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_x_discrete(label = c("AVGE"= "A. germinans", "LARA" = "L. racemosa", "RHMA" = "R. mangle"))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 750)) +
+  labs(
+    title = "Species",
+    x = "",
+    y = ""
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.density.spp
+```
+
+```{r}
+plot.density.spp + plot.basal.spp
+```
+###Summary table for paper
+
+```{r}
+all_plants_summary <- full_tree_counts2 %>%
+  select(-quadrat_code) %>%
+  group_by(year, Bay, habitat, species_consolidated, sap_tree) %>%
+  summarise(
+            n = sum(count),
+            mean_bam2 = mean(mean_ba_m2, na.rm = TRUE), 
+            sd_bam2 = sd(mean_ba_m2),
+            sem_bam2 = sd_bam2/sqrt(n),
+            mean_ba_ha = mean(mean_ba_per_ha, na.rm = TRUE),
+            sd_ba_ha = sd(mean_ba_per_ha),
+            sem_ba_ha = sd_ba_ha/sqrt(n),
+            mean_densitym2 = mean(density_per_m2),
+            sd_densitym2 = mean(density_per_m2),
+            sem_denm2 = sd_densitym2/sqrt(n),
+            mean_densityha = mean(density_per_ha),
+            sd_densityha = sd(density_per_ha),
+            sem_denha = sd_densityha/sqrt(n))
+```
+
+###Download
+```{r}
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with desired folder path
+file_name <- "all_trees_summary.csv"                  # Replace with desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(all_plants_summary, path = full_path)
+```
+
+####Combine Graphs
+
+###### basal area
+```{r}
+#Make font bigger
+plot.basal.type <- plot.basal.type + theme(text = element_text(size =  17))
+plot.basal.spp <- plot.basal.spp + theme(text = element_text(size =  17))
+
+# combine
+ plot.basal.type + plot.basal.spp
+```
+
+###### density
+```{r}
+#Make font bigger
+plot.density.type <- plot.density.type + theme(text = element_text(size =  17))
+plot.density.spp <- plot.density.spp + theme(text = element_text(size =  17))
+
+# combine
+plot.density.type + plot.density.spp
+```
+
+##*DBH Relative Freq.
+
+```{r}
+# Create DBH size class column
+mang_trees_freq <- mang_trees2 %>%
+  mutate(
+    dbh_class = cut(
+      dbh_cm,
+      breaks = c(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30),
+      labels = c("0–3", "3–6", "6–9", "9–12", "12–15", 
+                 "15–18", "18–21", "21–24", "24–27", "27–30"),
+      include.lowest = TRUE,
+      right = FALSE
+    )
+  )
+
+```
+
+```{r}
+
+mang_trees_freq <- mang_trees_freq %>%
+  filter(!is.na(dbh_class)) %>%
+  group_by(year, dbh_class) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(rel_freq = (count / sum(count)) * 100)
+
+```
+
+```{r}
+mang_trees_freq$year <- as.factor(mang_trees_freq$year)
+```
+
+
+```{r}
+ggplot(mang_trees_freq, aes(x = dbh_class, y = rel_freq, fill = year)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge()) +
+scale_fill_manual(
+    values=c("palevioletred4", "plum4")) +
+  labs(
+    x = "DBH Size Class (cm)",
+    y = "Relative Frequency (%)",
+    fill = "Year",
+    title = ""
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.title.y = element_markdown(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r}
+ggplot(mang_trees_freq, aes(x = dbh_class, y = rel_freq)) +
+  geom_col(fill = "palevioletred4") +
+  labs(
+    x = "DBH Size Class (cm)",
+    y = "Relative Frequency (%)",
+    title = ""
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+
+```
+
+
+##*Understory abundance over time (initial, 4-month, 8-month, and 12-month). Linear Mixed Model (LMM).
+
+```{r}
+#SEE initial dataset in RQ2 for abundance overall info.
+
+# There was no difference in abundance overall. Now we can see if abundance changed over time. Right now, we have a "NumberMonth" column that has 0 (inital moitoring time), 4 (4-month monitoring), 8, and 12. Lets leave out February mangroves since they were not continuously monitored, and then calculate relative abundance for time. 
+
+#table for dead mangs just in case interested later on
+dead.mangs <- mang_data %>% 
+  filter(binom.surv == 1)
+
+#table for living mangroves
+living.mangs <- mang_data %>% 
+  filter(binom.surv == 0)
+```
+
+```{r}
+#get rid of Feb
+living.mangs <- living.mangs %>% 
+  filter(MonitoringChunk != "Feb24")
+```
+
+```{r}
+living.mangs$Bay <- as.factor(living.mangs$Bay)
+living.mangs$NumberMonths <- as.factor(living.mangs$NumberMonths)
+living.mangs$quadrat_code <- as.factor(living.mangs$quadrat_code)
+living.mangs$Habitat <- as.factor(living.mangs$Habitat)
+```
+
+```{r}
+# Get Seedling counts
+mangcountmonths <- living.mangs %>%
+  group_by(Bay, Habitat, quadrat_code, NumberMonths) %>%
+  summarise(seedling_count = n_distinct(Tag, na.rm = TRUE), .groups = "drop") 
+```
+
+```{r}
+# get values for quadrats that did not have any mangroves in them:
+all_months <- unique(living.mangs$NumberMonths)
+ 
+ all_quadrats_time <- expand_grid(
+   all_quadrats_ref,
+  NumberMonths = all_months
+ )
+ # then join quadrats that did not have any mangroves in them:
+ mangcountmonths <- all_quadrats_time %>%
+   left_join(mangcountmonths, by = c("Bay", "Habitat", "quadrat_code", "NumberMonths")) %>%
+   mutate(seedling_count = replace_na(seedling_count, 0))
+```
+
+
+```{r}
+# Add Abundance
+mangcountmonths <- mangcountmonths %>%
+  mutate(density = seedling_count/area,
+        relative_abundance = seedling_count/ sum(seedling_count),
+         percent_abundance = seedling_count/ sum(seedling_count)*100)
+```
+
+```{r}
+summary_abundance <- mangcountmonths %>%
+  group_by(NumberMonths) %>%
+  summarise(
+    mean_abundance = mean(relative_abundance, na.rm = TRUE),
+    sd = sd(relative_abundance, na.rm = TRUE),
+    n = n(),
+    sem = sd / sqrt(n),
+    ci95 = sem * 1.96 
+  )
+```
+
+
+```{r}
+mangcountmonths$Bay <- as.factor(mangcountmonths$Bay)
+mangcountmonths$NumberMonths <- as.factor(mangcountmonths$NumberMonths)
+mangcountmonths$quadrat_code <- as.factor(mangcountmonths$quadrat_code)
+mangcountmonths$Habitat <- as.factor(mangcountmonths$Habitat)
+```
+
+```{r}
+model <- lmer(seedling_count ~ NumberMonths + (1 | quadrat_code), data = mangcountmonths)
+summary(model)
+```
+
+
+```{r}
+# pairwise comparisons of estimated marginal means
+emm <- emmeans(model, ~ NumberMonths)
+pairs(emm, adjust = "tukey")
+
+```
+
+
+```{r}
+summary_month_data <- mangcountmonths %>%
+  group_by(NumberMonths) %>%
+  summarise(
+    mean = mean(seedling_count, na.rm = TRUE),
+    sd = sd(seedling_count, na.rm = TRUE),
+    n = n(),
+    se = sd / sqrt(n),
+    .groups = "drop"
+  )
+```
+
+```{r}
+summary_month_data <- summary_month_data %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  
+    labels = c("a", "ab", "b", "b")
+  )
+print(summary_month_data)
+```
+
+```{r}
+summary_month_data$NumberMonths <- factor(summary_month_data$NumberMonths,
+                                          levels = c(0, 4, 8, 12),
+                                          labels = c("Initial", "4-months", "8-months", "12-months"))
+```
+
+```{r}
+plot.mang.seed.abund <- ggplot(summary_month_data, aes(x = NumberMonths, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "lightpink4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = summary_month_data$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 3.5)) +
+  labs(
+    title = "",
+    x = "",
+    y = "Mean Understory Abundance (± SEM) "
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.mang.seed.abund
+```
+
+
+```{r}
+#Interaction
+model2 <- lmer(seedling_count ~ NumberMonths * Habitat * Bay + (1 | quadrat_code), data = mangcountmonths)
+summary(model2)
+```
+
+```{r}
+
+summary_interaction_data <- mangcountmonths %>%
+  group_by(NumberMonths, Habitat, Bay) %>%
+  summarise(
+    mean_abundance = mean(percent_abundance, na.rm = TRUE),
+    sd = sd(percent_abundance, na.rm = TRUE),
+    n = n(),
+    sem = sd / sqrt(n),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+summary_interaction_data <- summary_interaction_data %>%
+  mutate(NumberMonths = as.numeric(as.character(NumberMonths)))
+
+summary_interaction_data <- summary_interaction_data %>%
+  mutate(Habitat = factor(Habitat, levels = rev(levels(factor(Habitat)))))
+```
+
+
+##*Understory Survivorship over time (4-month, 8-month, 12-month). Kaplan-Meier Model Estimates.
+
+###surv over 4 mo. period
+
+```{r}
+seed.surv.4mo <- mang_data %>% 
+  filter(NumberMonths == 4)
+```
+
+```{r}
+library(survival)
+library(survminer)
+```
+
+```{r}
+#For just 4 months seedlings
+km_fit <- survfit(Surv(NumberMonths, binom.surv) ~ 1, data = seed.surv.4mo)
+
+# View the summary
+summary(km_fit)
+```
+
+
+```{r}
+# Fit the Kaplan-Meier model by habitat type after 4 months
+km_fit_hab4mo <- survfit(Surv(NumberMonths, binom.surv) ~ Habitat, data = seed.surv.4mo)
+summary(km_fit_hab4mo)
+# Compare groups using the log-rank test
+survdiff(Surv(NumberMonths, binom.surv) ~ Habitat, data = seed.surv.4mo)
+```
+
+```{r}
+# Fit the Kaplan-Meier model by Bay after 4 months
+km_fit_bay4mo <- survfit(Surv(NumberMonths, binom.surv) ~ Bay, data = seed.surv.4mo)
+summary(km_fit_bay4mo)
+# Compare groups using the log-rank test
+survdiff(Surv(NumberMonths, binom.surv) ~ Bay, data = seed.surv.4mo)
+
+```
+
+###chi-squared table
+```{r}
+table(seed.surv.4mo$Condition, seed.surv.4mo$binom.surv)
+```
+
+###surv over 8 mo. period
+```{r}
+seed.surv.8mo <- mang_data %>% 
+  filter(NumberMonths == 8)
+```
+
+```{r}
+#For just 8 months seedlings
+km_fit_8mo <- survfit(Surv(NumberMonths, binom.surv) ~ 1, data = seed.surv.8mo)
+
+summary(km_fit_8mo)
+```
+
+```{r}
+# Fit the Kaplan-Meier model by Habitat after 8 months
+km_fit_hab8mo <- survfit(Surv(NumberMonths, binom.surv) ~ Habitat, data = seed.surv.8mo)
+
+# Compare groups using the log-rank test
+survdiff(Surv(NumberMonths, binom.surv) ~ Habitat, data = seed.surv.8mo)
+```
+
+```{r}
+# Fit the Kaplan-Meier model by Bay after 8 months
+km_fit_bay8mo <- survfit(Surv(NumberMonths, binom.surv) ~ Bay, data = seed.surv.8mo)
+print(km_fit_bay8mo)
+# Compare groups using the log-rank test
+survdiff(Surv(NumberMonths, binom.surv) ~ Bay, data = seed.surv.8mo)
+```
+
+```{r}
+seed.surv.12mo <- mang_data %>% 
+  filter(NumberMonths == 12)
+```
+
+```{r}
+#For just 12 months seedlings
+km_fit_12mo <- survfit(Surv(NumberMonths, binom.surv) ~ 1, data = seed.surv.12mo)
+
+summary(km_fit_12mo)
+```
+
+```{r}
+#log rank 12 mon Habitat
+survdiff(Surv(NumberMonths, binom.surv) ~ Habitat, data = seed.surv.12mo)
+```
+
+```{r}
+#log rank 12 mon Bay
+survdiff(Surv(NumberMonths, binom.surv) ~ Bay, data = seed.surv.12mo)
+```
+
+#*RQ2: How do bay, habitat type, and their interaction influence the natural recovery of the CMC habitat?
+
+
+
+##*Terrestrial HOBO Light & Temp (T-tests)
+
+```{r}
+library(lubridate)
+light_temp_terrestrial_hobo$Date_Time_AST <- mdy_hm(light_temp_terrestrial_hobo$Date_Time_AST)
+```
+
+```{r}
+light_temp_terrestrial_hobo <- light_temp_terrestrial_hobo %>%
+  mutate(
+    Date = as_date(Date_Time_AST),
+    Hour = hour(Date_Time_AST),
+    Month = month(Date_Time_AST, label = TRUE),
+    DOY = yday(Date_Time_AST)
+  )
+```
+
+```{r}
+#overall summary
+hobo_terrestrial_summary <- light_temp_terrestrial_hobo %>%
+  summarise(
+    mean_temp = mean(Temperature_C, na.rm = TRUE),
+    sem_temp  = sd(Temperature_C, na.rm = TRUE) / sqrt(sum(!is.na(Temperature_C))),
+    min_temp  = min(Temperature_C, na.rm = TRUE),
+    max_temp  = max(Temperature_C, na.rm = TRUE),
+    
+    mean_light = mean(Light_lux, na.rm = TRUE),
+    sem_light  = sd(Light_lux, na.rm = TRUE) / sqrt(sum(!is.na(Light_lux))),
+    min_light  = min(Light_lux, na.rm = TRUE),
+    max_light  = max(Light_lux, na.rm = TRUE)
+  )
+```
+
+
+```{r}
+habitat_temp_summary <- light_temp_terrestrial_hobo %>%
+  group_by(Habitat) %>%
+  summarise(
+    mean_temp = mean(Temperature_C, na.rm = TRUE),
+    sd_temp = sd(Temperature_C, na.rm = TRUE),
+    n = n(),
+    sem_temp = sd_temp / sqrt(n),
+        min_temp  = min(Temperature_C, na.rm = TRUE),
+    max_temp  = max(Temperature_C, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+habitat_temp_summary
+```
+
+```{r}
+bay_temp_summary <- light_temp_terrestrial_hobo %>%
+  group_by(Bay) %>%
+  summarise(
+    mean_temp = mean(Temperature_C, na.rm = TRUE),
+    sd_temp = sd(Temperature_C, na.rm = TRUE),
+    n = n(),
+    sem_temp = sd_temp / sqrt(n),
+    min_temp  = min(Temperature_C, na.rm = TRUE),
+    max_temp  = max(Temperature_C, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+bay_temp_summary
+```
+
+```{r}
+habitat_light_summary <- light_temp_terrestrial_hobo %>%
+  group_by(Habitat) %>%
+  summarise(
+    mean_temp = mean(Light_lux, na.rm = TRUE),
+    sd_temp = sd(Light_lux, na.rm = TRUE),
+    n = n(),
+    sem_temp = sd_temp / sqrt(n),
+    min_temp  = min(Light_lux, na.rm = TRUE),
+    max_temp  = max(Light_lux, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+habitat_light_summary
+```
+
+```{r}
+bay_light_summary <- light_temp_terrestrial_hobo %>%
+  group_by(Bay) %>%
+  summarise(
+    mean_temp = mean(Light_lux, na.rm = TRUE),
+    sd_temp = sd(Light_lux, na.rm = TRUE),
+    n = n(),
+    sem_temp = sd_temp / sqrt(n),
+    min_temp  = min(Light_lux, na.rm = TRUE),
+    max_temp  = max(Light_lux, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+bay_light_summary
+```
+
+###Temperature
+#### Daily Bay
+```{r}
+daily_terr_bay_temp <- light_temp_terrestrial_hobo %>%
+  group_by(Bay, Date) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+daily.line.plot.bay.temp <- ggplot(daily_terr_bay_temp, aes(x = Date, y = mean_temp, color = Bay)) +
+  geom_line(alpha = 0.6) +
+  scale_y_continuous(limits = c(25, 35)) +
+  theme_minimal()+
+  labs(y = "Mean Temperature (°C)", x = "") +
+  scale_x_date(
+    date_breaks = "1 month",           # Tick every month
+    date_labels = "%b",   # Format as Jan, Feb, etc.
+    expand = expansion(mult = c(0.01, 0.01))) + guides(color= "none") + scale_color_manual(values = c("Otter" = "darkorchid4", "Water" = "cyan4"))
+
+daily.line.plot.bay.temp
+```
+
+#### Monthly Bay
+```{r}
+monthly_terr_bay_temp <- light_temp_terrestrial_hobo %>%
+  group_by(Bay, Month) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+shapiro.test(monthly_terr_bay_temp$mean_temp)
+# SIG W = 0.92747, p-value = 0.08559
+```
+
+```{r}
+t.test(mean_temp ~ Bay, data = monthly_terr_bay_temp)
+# t = 1.0229, df = 21.272, p-value = 0.3179
+```
+
+```{r}
+monthly.bar.plot.bay.temp <- ggplot(monthly_terr_bay_temp, aes(x = Bay, y = mean_temp)) +
+  geom_boxplot() +
+  labs(y = "",
+       x = "")+
+  scale_y_continuous(limits = c(25, 35)) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )  +
+  annotate(
+  "text",
+  x = Inf,
+  y = Inf,
+  label = "t = 1.02, p-value = 0.318",
+  hjust = 1.1,  # Shift left into plot from right edge
+  vjust = 1.5,  # Shift down from top edge
+  size = 2,
+  fontface = "bold"
+) +
+  theme_minimal()+
+  theme(
+    panel.grid.major.x = element_blank(),  # removes major vertical gridlines
+    panel.grid.minor.x = element_blank()   # removes minor vertical gridlines
+)
+monthly.bar.plot.bay.temp
+```
+
+#### Daily Habitat
+```{r}
+daily_terr_hab_temp <- light_temp_terrestrial_hobo %>%
+  group_by(Habitat, Date) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+daily.line.plot.hab.temp <- ggplot(daily_terr_hab_temp, aes(x = Date, y = mean_temp, color = Habitat)) +
+  geom_line(alpha = 0.6) +
+  theme_minimal()+
+  scale_y_continuous(limits = c(25, 35)) +
+  labs(y = "Mean Temperature  (°C)", x = "")+
+    scale_x_date(
+    date_breaks = "1 month",           
+    date_labels = "%b",   # Format as Jan, Feb, etc.
+    expand = expansion(mult = c(0.01, 0.01)) 
+    )+ 
+      guides(color= "none")+
+      scale_color_manual(values = c("Debris" = "orangered3", "Fringe" = "darkgreen"))
+
+daily.line.plot.hab.temp
+```
+
+#### Monthly Habitat
+```{r}
+monthly_terr_hab_temp <- light_temp_terrestrial_hobo %>%
+  group_by(Habitat, Month) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+shapiro.test(monthly_terr_hab_temp$mean_temp)
+#NORM W = 0.92689, p-value = 0.0831
+```
+
+```{r}
+t.test(mean_temp ~ Habitat, data = monthly_terr_hab_temp)
+#t = 1.1184, df = 20.79, p-value = 0.2761
+```
+
+```{r}
+monthly.bar.plot.hab.temp <- ggplot(monthly_terr_hab_temp, aes(x = Habitat, y = mean_temp)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = c(25, 35)) +
+  labs(y = "",
+       x = "")+ 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )  +
+annotate(
+  "text",
+  x = Inf,
+  y = Inf,
+  label = "t = 1.12, p-value = 0.276",
+  hjust = 1.1, 
+  vjust = 1.5,  
+  size = 2,
+  fontface = "bold"
+) +
+  theme_minimal()+
+  theme(
+    panel.grid.major.x = element_blank(), 
+    panel.grid.minor.x = element_blank()   
+)
+monthly.bar.plot.hab.temp
+```
+
+###Light
+
+#### Daily Bay
+```{r}
+daily_terr_bay_light <- light_temp_terrestrial_hobo %>%
+  group_by(Bay, Date) %>%
+  summarise(mean_light = mean(Light_lux, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+daily.line.plot.bay.light <- ggplot(daily_terr_bay_light, aes(x = Date, y = mean_light, color = Bay)) +
+  geom_line(alpha = 0.6) +
+  scale_y_continuous(limits = c(0, 20000)) +
+  theme_minimal() +
+  labs(y = "Mean Light (lux)", x = "Date")+
+    scale_x_date(
+    date_breaks = "1 month",           
+    date_labels = "%b",   
+    expand = expansion(mult = c(0.01, 0.01))  # Reduce extra whitespace
+  )+ 
+  theme_minimal()+
+  theme(
+  legend.position = "bottom",
+  legend.title = element_text(face = "bold"),
+  legend.box = "horizontal",
+  legend.justification = "center"
+)+scale_color_manual(values = c("Otter" = "darkorchid4", "Water" = "cyan4"))
+
+daily.line.plot.bay.light
+```
+
+#### Monthly Bay
+```{r}
+monthly_terr_bay_light <- light_temp_terrestrial_hobo %>%
+  group_by(Bay, Month) %>%
+  summarise(mean_light = mean(Light_lux, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+shapiro.test(monthly_terr_bay_light$mean_light)
+# W = 0.94645, p-value = 0.2267
+```
+
+```{r}
+t.test(mean_light ~ Bay, data = monthly_terr_bay_light)
+# t = 2.8838, df = 18.78, p-value = 0.00959
+```
+
+```{r}
+monthly.bar.plot.bay.light <- ggplot(monthly_terr_bay_light, aes(x = Bay, y = mean_light)) +
+  geom_boxplot() +
+  labs(y = "",
+       x = "")+ 
+  scale_y_continuous(limits = c(0, 20000)) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )  +
+annotate(
+  "text",
+  x = Inf,
+  y = Inf,
+  label = "t = 2.88, p-value = 0.010*",
+  hjust = 1.1,  
+  vjust = 1.5, 
+  size = 2,
+  fontface = "bold"
+) +
+  theme_minimal()+
+  theme(
+    panel.grid.major.x = element_blank(),  
+    panel.grid.minor.x = element_blank()   
+)
+monthly.bar.plot.bay.light
+```
+
+#### Daily Habitat
+```{r}
+daily_terr_hab_light <- light_temp_terrestrial_hobo %>%
+  group_by(Habitat, Date) %>%
+  summarise(mean_light = mean(Light_lux, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+daily.line.plot.hab.light <- ggplot(daily_terr_hab_light, aes(x = Date, y = mean_light, color = Habitat)) +
+  geom_line(alpha = 0.6) +
+  scale_y_continuous(limits = c(0, 25000)) +
+  theme_minimal() +
+  labs(y = "Mean Light (lux)", x = "Date")+
+    scale_x_date(
+    date_breaks = "1 month",           
+    date_labels = "%b",   
+    expand = expansion(mult = c(0.01, 0.01))  
+  )+
+  theme_minimal()+
+  theme(
+  legend.position = "bottom",
+  legend.title = element_text(face = "bold"),
+  legend.box = "horizontal",
+  legend.justification = "center"
+)+scale_color_manual(values = c("Debris" = "orangered3", "Fringe" = "darkgreen"))
+
+daily.line.plot.hab.light
+```
+
+#### Monthly Habitat
+```{r}
+monthly_terr_hab_light <- light_temp_terrestrial_hobo %>%
+  group_by(Habitat, Month) %>%
+  summarise(mean_light = mean(Light_lux, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+shapiro.test(monthly_terr_hab_light$mean_light)
+#NORM W = 0.92689, p-value = 0.0831
+```
+
+```{r}
+t.test(mean_light ~ Habitat, data = monthly_terr_hab_light)
+#t = 3.9643, df = 13.335, p-value = 0.001543
+```
+
+```{r}
+monthly.bar.plot.hab.light <- ggplot(monthly_terr_hab_light, aes(x = Habitat, y = mean_light)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = c(0, 25000)) +
+  labs(y = "",
+       x = "")+ 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )  +
+annotate(
+  "text",
+  x = Inf,
+  y = Inf,
+  label = "t = 3.96, p-value = 0.002*",
+  hjust = 1.1,  
+  vjust = 1.5,  
+  size = 2,
+  fontface = "bold"
+) +
+  theme_minimal()+
+  theme(
+    panel.grid.major.x = element_blank(),  
+    panel.grid.minor.x = element_blank()   
+)
+monthly.bar.plot.hab.light
+```
+
+```{r}
+library(patchwork)
+
+```
+
+###Bay Combo
+#### Combine Daily Bay Temp/Light Plots
+```{r}
+combined_bay_terrestrial_temp_light_daily_plot <- daily.line.plot.bay.temp + daily.line.plot.bay.light + plot_layout(ncol = 1, heights = c(1, 1))
+combined_bay_terrestrial_temp_light_daily_plot
+```
+
+#### Combine monthly Bay Temp/Light plots
+```{r}
+combined_bay_terrestrial_temp_light_monthly_plot <- monthly.bar.plot.bay.temp + monthly.bar.plot.bay.light + plot_layout(ncol = 1, heights = c(3, 3))
+combined_bay_terrestrial_temp_light_monthly_plot
+```
+#### Combine Daily/Monthly Bay Temp Plots
+```{r}
+combined_terrestrial_bay_plots <- (
+  combined_bay_terrestrial_temp_light_daily_plot|
+  combined_bay_terrestrial_temp_light_monthly_plot
+) +
+  plot_layout(widths = c(1, 0.6)) +
+  plot_annotation(
+    title = "Temperature and Light by Bay"
+  ) &
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)  # Centered & styled
+  )
+
+combined_terrestrial_bay_plots
+```
+
+###Habitat Combo
+
+#### Combine Daily Hab Temp/Light Plots
+```{r}
+combined_hab_terrestrial_temp_light_daily_plot <- daily.line.plot.hab.temp + daily.line.plot.hab.light + plot_layout(ncol = 1, heights = c(1, 1))
+combined_hab_terrestrial_temp_light_daily_plot
+```
+
+#### Combine monthly Hab Temp/Light plots
+```{r}
+combined_hab_terrestrial_temp_light_monthly_plot <- monthly.bar.plot.hab.temp + monthly.bar.plot.hab.light +plot_layout(ncol = 1, heights = c(3,3))
+combined_hab_terrestrial_temp_light_monthly_plot
+```
+#### Combine Daily/Monthly Hab Temp Plots
+```{r}
+combined_terrestrial_hab_plots <- (
+  combined_hab_terrestrial_temp_light_daily_plot|
+  combined_hab_terrestrial_temp_light_monthly_plot
+) +
+  plot_layout(widths = c(1, 0.6)) +
+  plot_annotation(
+    title = "Temperature and Light by Habitat"
+  ) &
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)  
+  )
+
+combined_terrestrial_hab_plots
+```
+
+###Final Terrestrial
+
+```{r}
+final_combined_terrestrial_plots <- (
+  combined_terrestrial_bay_plots /
+  combined_terrestrial_hab_plots
+)+
+  plot_layout(heights = c(1, 1))
+
+final_combined_terrestrial_plots
+```
+
+```{r}
+#keep titles
+final_combined_terrestrial_plots <- (
+  wrap_elements(combined_terrestrial_bay_plots) /
+  wrap_elements(combined_terrestrial_hab_plots)
+)+
+  plot_layout(heights = c(1, 1))
+final_combined_terrestrial_plots
+```
+
+##*Marine HOBO Temp (T-tests)
+
+```{r}
+library(lubridate)
+light_temp_array_hobo$Date_Time_AST <- mdy_hm(light_temp_array_hobo$Date_Time_AST)
+```
+
+
+```{r}
+light_temp_array_hobo <- light_temp_array_hobo %>%
+  mutate(
+    Date = as_date(Date_Time_AST),
+    Hour = hour(Date_Time_AST),
+    Month = month(Date_Time_AST, label = TRUE),
+    DOY = yday(Date_Time_AST)
+  )
+```
+
+```{r}
+#overall summary
+hobo_array_summary <- light_temp_array_hobo %>%
+  summarise(
+    mean_temp = mean(Temperature_C, na.rm = TRUE),
+    sem_temp  = sd(Temperature_C, na.rm = TRUE) / sqrt(sum(!is.na(Temperature_C))),
+    min_temp  = min(Temperature_C, na.rm = TRUE),
+    max_temp  = max(Temperature_C, na.rm = TRUE),
+  )
+```
+
+```{r}
+#range min has negative values, so need to adjust the data so that it has temp data within a more realistic range. Lets use the same air temperature ranges (18 - 53 degrees). 
+
+light_temp_array_hobo <- light_temp_array_hobo %>%
+  filter(between(Temperature_C, 18, 53))
+```
+
+```{r}
+#repeat overall summary
+hobo_array_summary <- light_temp_array_hobo %>%
+  summarise(
+    mean_temp = mean(Temperature_C, na.rm = TRUE),
+    sem_temp  = sd(Temperature_C, na.rm = TRUE) / sqrt(sum(!is.na(Temperature_C))),
+    min_temp  = min(Temperature_C, na.rm = TRUE),
+    max_temp  = max(Temperature_C, na.rm = TRUE),
+  )
+```
+
+
+```{r}
+habitat_temp_summary_array <- light_temp_array_hobo %>%
+  group_by(Habitat) %>%
+  summarise(
+    mean_temp = mean(Temperature_C, na.rm = TRUE),
+    sd_temp = sd(Temperature_C, na.rm = TRUE),
+    n = n(),
+    sem_temp = sd_temp / sqrt(n),
+    min_temp  = min(Temperature_C, na.rm = TRUE),
+    max_temp  = max(Temperature_C, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+habitat_temp_summary_array
+```
+
+```{r}
+bay_temp_summary_array <- light_temp_array_hobo %>%
+  group_by(Bay) %>%
+  summarise(
+    mean_temp = mean(Temperature_C, na.rm = TRUE),
+    sd_temp = sd(Temperature_C, na.rm = TRUE),
+    n = n(),
+    sem_temp = sd_temp / sqrt(n),
+    min_temp  = min(Temperature_C, na.rm = TRUE),
+    max_temp  = max(Temperature_C, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+bay_temp_summary_array
+```
+
+### Daily Bay
+```{r}
+daily_array_bay_temp <- light_temp_array_hobo %>%
+  group_by(Bay, Date) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+daily.line.plot.bay.temp.array <- ggplot(daily_array_bay_temp, aes(x = Date, y = mean_temp, color = Bay)) +
+  geom_line(alpha = 0.6) +
+  scale_y_continuous(limits = c(20, 35)) +
+  theme_minimal()+
+  labs(y = "Mean Temperature (°C)", x = "") +
+  scale_x_date(
+    date_breaks = "1 month",           # Tick every month
+    date_labels = "%b",   # Format as Jan, Feb, etc.
+    expand = expansion(mult = c(0.01, 0.01))) +
+  scale_color_manual(values = c("Otter" = "darkorchid4", "Water" = "cyan4"))
+
+daily.line.plot.bay.temp.array
+```
+
+### Monthly Bay
+```{r}
+monthly_array_bay_temp <- light_temp_array_hobo %>%
+  group_by(Bay, Month) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+shapiro.test(monthly_array_bay_temp$mean_temp)
+# SIG W = 0.87731, p-value = 0.00734
+```
+
+```{r}
+t.test(mean_temp ~ Bay, data = monthly_array_bay_temp)
+# t = -0.15895, df = 21.895, p-value = 0.8752
+```
+
+```{r}
+monthly.bar.plot.bay.temp.array <- ggplot(monthly_array_bay_temp, aes(x = Bay, y = mean_temp)) +
+  geom_boxplot() +
+  labs(y = "",
+       x = "")+
+  scale_y_continuous(limits = c(20, 35)) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )  +
+  annotate(
+  "text",
+  x = Inf,
+  y = Inf,
+  label = "t = -0.057, p-value = 0.955",
+  hjust = 1.1,  # Shift left into plot from right edge
+  vjust = 1.5,  # Shift down from top edge
+  size = 4,
+  fontface = "bold"
+) +
+  theme_minimal()+
+  theme(
+    panel.grid.major.x = element_blank(),  # removes major vertical gridlines
+    panel.grid.minor.x = element_blank()   # removes minor vertical gridlines
+)
+monthly.bar.plot.bay.temp.array
+```
+
+### Daily Habitat
+```{r}
+daily_array_hab_temp <- light_temp_array_hobo %>%
+  group_by(Habitat, Date) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+daily.line.plot.hab.temp.array <- ggplot(daily_array_hab_temp, aes(x = Date, y = mean_temp, color = Habitat)) +
+  geom_line(alpha = 0.6) +
+  theme_minimal()+
+  scale_y_continuous(limits = c(20, 35)) +
+  labs(y = "Mean Temperature  (°C)", x = "")+
+    scale_x_date(
+    date_breaks = "1 month",           # Tick every month
+    date_labels = "%b",   # Format as Jan, Feb, etc.
+    expand = expansion(mult = c(0.01, 0.01)) 
+    )+ 
+      scale_color_manual(values = c("Debris" = "orangered3", "Fringe" = "darkgreen"))
+
+daily.line.plot.hab.temp.array
+```
+
+### Monthly Habitat
+```{r}
+monthly_array_hab_temp <- light_temp_array_hobo %>%
+  group_by(Habitat, Month) %>%
+  summarise(mean_temp = mean(Temperature_C, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+shapiro.test(monthly_array_hab_temp$mean_temp)
+#NORM W = 0.88101, p-value = 0.01048
+```
+
+```{r}
+t.test(mean_temp ~ Habitat, data = monthly_array_hab_temp)
+# t = -0.27946, df = 20.991, p-value = 0.7826
+```
+
+```{r}
+monthly.bar.plot.hab.temp.array <- ggplot(monthly_array_hab_temp, aes(x = Habitat, y = mean_temp)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = c(20, 35)) +
+  labs(y = "",
+       x = "")+ 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )  +
+annotate(
+  "text",
+  x = Inf,
+  y = Inf,
+  label = "t = -0.280, p-value = 0.783",
+  hjust = 1.1,  # Shift left into plot from right edge
+  vjust = 1.5,  # Shift down from top edge
+  size = 4,
+  fontface = "bold"
+) +
+  theme_minimal()+
+  theme(
+    panel.grid.major.x = element_blank(),  # removes major vertical gridlines
+    panel.grid.minor.x = element_blank()   # removes minor vertical gridlines
+)
+monthly.bar.plot.hab.temp.array
+```
+
+#### Combine Graphs
+
+```{r}
+library(patchwork)
+
+```
+
+####Hab Combo
+
+##### Combine Daily/Monthly Hab Temp Plots
+```{r}
+combined_array_hab_plots <- (
+  daily.line.plot.hab.temp.array|
+  monthly.bar.plot.hab.temp.array
+) +
+  plot_layout(widths = c(1, 0.6)) +
+  plot_annotation(
+    title = "Temperature by Habitat"
+  ) &
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)  
+  )
+
+combined_array_hab_plots
+```
+
+####Bay
+
+##### Combine Daily/Monthly Bay Temp Plots
+```{r}
+combined_array_bay_plots <- (
+  daily.line.plot.bay.temp.array|
+  monthly.bar.plot.bay.temp.array
+) +
+  plot_layout(widths = c(1, 0.6)) +
+  plot_annotation(
+    title = "Temperature by Bay"
+  ) &
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14) 
+  )
+
+combined_array_bay_plots
+```
+
+####Final Array
+
+```{r}
+final_combined_array_plots <- (
+  combined_array_bay_plots /
+  combined_array_hab_plots
+)+
+  plot_layout(heights = c(1, 1))
+
+final_combined_array_plots
+```
+
+```{r}
+#keep titles
+final_combined_array_plots <- (
+  wrap_elements(combined_array_bay_plots) /
+  wrap_elements(combined_array_hab_plots)
+)+
+  plot_layout(heights = c(1, 1))
+final_combined_array_plots
+```
+
+##*YSI Water Quality (sal, DO, TDS, SPC, Temp, pH) (Mann-Whitney U tests & two-sample t-test for pH)
+```{r}
+bay.sal.summary <- ysi %>%
+  group_by(Bay) %>% 
+  summarise(
+    mean = mean(sal),  
+    sd = sd(sal),     
+    sample_size = n(), 
+    se = sd / sqrt(n())  
+  )
+
+View(bay.sal.summary)
+```
+
+```{r}
+#go through each variable for normality
+shapiro.test(ysi$Ph[ysi$Habitat == "Debris"])
+shapiro.test(ysi$Ph[ysi$Habitat == "Fringe"])
+#use t-test for pH, everything else can use a Wilcoxon
+```
+
+###Habitat
+```{r}
+#FOR LOOP For HABITAT MEANS
+# Columns to summarize
+cols_to_summarize <- c("Temp", "tds", "Dopercent", "DOmgL", "sal", "spc", "tds", "Ph")
+
+# Initialize an empty list to store results
+ysi_summary_list <- list()
+
+# Loop through each column
+for (col in cols_to_summarize) {
+  ysi_summary_list[[col]] <- ysi %>%
+    group_by(Habitat) %>%
+    summarise(
+      mean = mean(get(col), na.rm = TRUE),  
+      sd = sd(get(col), na.rm = TRUE),
+      sample_size = n(),
+      se = sd / sqrt(sample_size)
+    ) %>%
+    mutate(variable = col)  # Add column name for reference
+}
+
+# Combine all results into one data frame
+ysi_summary_all <- bind_rows(ysi_summary_list)
+
+
+print(ysi_summary_all, n = Inf)
+```
+
+```{r}
+#Who Wilcocon Test for HABITAT
+# Columns to test
+habitat_cols_to_test <- c("Temp", "tds", "Dopercent", "DOmgL", "sal", "spc", "tds", "Ph")
+
+# Initialize a list to store test results
+ysi_habitat_test_results <- list()
+
+# Loop through each variable
+for (col in habitat_cols_to_test) {
+  # Perform Wilcoxon test
+  test <- wilcox.test(ysi[[col]] ~ ysi$Habitat)
+  
+  # Calculate effect size (rank-biserial correlation)
+  r <- effectsize::rank_biserial(ysi[[col]] ~ ysi$Habitat)
+  
+  # Calculate medians for each group
+  median_debris <- median(ysi[[col]][ysi$Habitat == "Debris"], na.rm = TRUE)
+  median_fringe <- median(ysi[[col]][ysi$Habitat == "Fringe"], na.rm = TRUE)
+  
+  # Store results
+  ysi_habitat_test_results[[col]] <- data.frame(
+    Variable = col,
+    Test = "Wilcoxon",
+    W_statistic = test$statistic,
+    p_value = test$p.value,
+    Median_Debris = median_debris,
+    Median_Fringe = median_fringe,
+    Rank_biserial_r = r$r_rank_biserial,
+    Effect_Size_CI_low = r$CI_low,
+    Effect_Size_CI_high = r$CI_high
+  )
+}
+
+# Combine all test results
+ysi_habitat_test_results_df <- bind_rows(ysi_habitat_test_results)
+
+
+print(ysi_habitat_test_results_df, row.names = FALSE)
+```
+
+###Bay
+```{r}
+#FOR LOOP for BAY MEANS
+cols_to_summarize <- c("Temp", "tds", "Dopercent", "DOmgL", "sal", "spc", "tds", "Ph")
+
+# Initialize an empty list to store results
+ysi_bay_summary_list <- list()
+
+# Loop through each column
+for (col in cols_to_summarize) {
+  ysi_bay_summary_list[[col]] <- ysi %>%
+    group_by(Bay) %>%
+    summarise(
+      mean = mean(get(col), na.rm = TRUE),  # Handle NAs
+      sd = sd(get(col), na.rm = TRUE),
+      sample_size = n(),
+      se = sd / sqrt(sample_size)
+    ) %>%
+    mutate(variable = col)  # Add column name for reference
+}
+
+# Combine all results into one data frame
+ysi_bay_summary_all <- bind_rows(ysi_bay_summary_list)
+
+
+print(ysi_bay_summary_all, n = Inf)
+```
+
+```{r}
+#Who Wilcocon Test for BAY
+# Columns to test
+bay_cols_to_test <- c("Temp", "tds", "Dopercent", "DOmgL", "sal", "spc", "tds", "Ph")
+
+# Initialize a list to store test results
+ysi_bay_test_results <- list()
+
+# Loop through each variable
+for (col in bay_cols_to_test) {
+  # Perform Wilcoxon test
+  test <- wilcox.test(ysi[[col]] ~ ysi$Bay)
+  
+  # Calculate effect size (rank-biserial correlation)
+  r <- effectsize::rank_biserial(ysi[[col]] ~ ysi$Bay)
+  
+  # Calculate medians for each group
+  median_otter <- median(ysi[[col]][ysi$Bay == "Otter"], na.rm = TRUE)
+  median_water <- median(ysi[[col]][ysi$Bay == "Water"], na.rm = TRUE)
+  
+  # Store results
+  ysi_bay_test_results[[col]] <- data.frame(
+    Variable = col,
+    Test = "Wilcoxon",
+    W_statistic = test$statistic,
+    p_value = test$p.value,
+    Median_Otter = median_otter,
+    Median_Water = median_water,
+    Rank_biserial_r = r$r_rank_biserial,
+    Effect_Size_CI_low = r$CI_low,
+    Effect_Size_CI_high = r$CI_high
+  )
+}
+
+# Combine all test results
+ysi_bay_test_results_df <- bind_rows(ysi_bay_test_results)
+
+
+print(ysi_bay_test_results_df, row.names = FALSE)
+```
+
+### pH
+
+```{r}
+#test for variances (if sig, run Welchs t-test)
+leveneTest(Ph ~ Habitat, data = ysi)
+#Bay & Hab: Not significant, so use Students t-test
+```
+
+```{r}
+#Habitat pH t-test
+ysi_habpH_clean <- ysi %>% drop_na(Ph, Habitat) 
+t.test(Ph ~ Habitat, data = ysi_habpH_clean, var.equal = TRUE)
+```
+
+```{r}
+##get Cohen's d
+effectsize::cohens_d(Ph ~ Habitat, data = ysi_habpH_clean, na.rm = TRUE)
+```
+
+```{r}
+#Bay pH t-test
+ysi_baypH_clean <- ysi %>% drop_na(Ph, Bay) 
+t.test(Ph ~ Bay, data = ysi_baypH_clean, var.equal = TRUE)
+```
+
+```{r}
+#get Cohen's d
+effectsize::cohens_d(Ph ~ Bay, data = ysi_baypH_clean, na.rm = TRUE)
+```
+
+```{r}
+median(ysi_habpH_clean$Ph[ysi_habpH_clean$Habitat == "Fringe"], na.rm = TRUE)
+```
+
+
+#*Densiometer
+```{r}
+bay.densi.sum <- densiometer %>%
+  group_by(Bay) %>% 
+  summarise(
+    mean = mean(Percent_Overstory),  
+    sd = sd(Percent_Overstory),     
+    sample_size = n(), 
+    se = sd / sqrt(n())  
+  )
+
+bay.densi.sum
+```
+
+```{r}
+hab.densi.sum <- densiometer %>%
+  group_by(Habitat) %>% 
+  summarise(
+    mean = mean(Percent_Overstory),  
+    sd = sd(Percent_Overstory),     
+    sample_size = n(), 
+    se = sd / sqrt(n())  
+  )
+
+hab.densi.sum
+```
+
+```{r}
+wilcox.test(Percent_Overstory ~ Habitat, data = densiometer, na.action = na.omit)
+```
+
+```{r}
+densiometer.long <- densiometer %>%
+  pivot_longer(
+    cols = c(Percent_Open, Percent_Overstory),
+    names_to = "Cover_Type",
+    values_to = "Percent_Cover"
+  )
+```
+
+```{r}
+hab.densi.sum2 <- densiometer.long %>%
+  group_by(Habitat, Cover_Type) %>% 
+  summarise(
+    mean = mean(Percent_Cover),  
+    sd = sd(Percent_Cover),     
+    sample_size = n(), 
+    se = sd / sqrt(n())  
+  )
+
+hab.densi.sum2
+```
+
+```{r}
+ggplot(hab.densi.sum2, aes(x = Habitat, y = mean, fill = Cover_Type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.2) +
+  scale_fill_manual(
+    values = c("black", "grey"),
+    labels = c("Open Sky", "Mangrove Canopy"))+
+  labs(
+    x = "",
+    y = "Mean Overstory (%)",
+    title = ""
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+  axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+densiometer.plot <- ggplot(hab.densi.sum2, aes(x = Habitat, y = mean, fill= Cover_Type)) +
+  geom_bar(stat = "identity") +
+  coord_cartesian(ylim = c(0,100))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  scale_fill_manual(
+    values=c("deepskyblue4", "darkolivegreen"), 
+      labels = c("Open Sky", "Mangrove Canopy"),
+      name = NULL) +
+  labs(
+    x = "",
+    y = "Mean Overstory (%)"
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+print(densiometer.plot)
+```
+
+#*Understory Abundance (Two-Way ANOVA)
+
+```{r}
+# first make table with seedling counts by hab, bay, and quadrat:
+totalmangcount <- mang_data %>%
+  group_by(Bay, Habitat, quadrat_code) %>%
+  summarise(seedling_count = n_distinct(Tag, na.rm = TRUE), .groups = "drop")
+
+# then join quadrats that did not have any mangroves in them:
+totalmangcount <- all_quadrats_ref %>%
+  left_join(totalmangcount, by = c("Bay", "Habitat", "quadrat_code")) %>%
+  mutate(seedling_count = replace_na(seedling_count, 0))
+```
+
+
+```{r}
+#shapiro test
+shapiro.test(totalmangcount$seedling_count)
+#W = 0.91233, p-value = 0.2285 NORMAL
+```
+
+```{r}
+#Since normal, run a two-way ANOVA
+totalmangcount$Bay <- as.factor(totalmangcount$Bay)
+totalmangcount$Habitat <- as.factor(totalmangcount$Habitat)
+
+# Run two-way ANOVA
+anova_model <- aov(seedling_count ~ Bay * Habitat, data = totalmangcount)
+summary(anova_model)
+#            Df Sum Sq Mean Sq F value Pr(>F)
+#Bay          1  12.00  12.000   2.323  0.166
+#Habitat      1   3.00   3.000   0.581  0.468
+#Bay:Habitat  1   1.33   1.333   0.258  0.625
+#Residuals    8  41.33   5.167 
+```
+
+```{r}
+#seedling counts were not sig, so lets look at relative abundance (#/total #)
+totalmangcount <- totalmangcount %>%
+  mutate(density = seedling_count/area,
+        relative_abundance = seedling_count/ sum(seedling_count),
+         percent_abundance = seedling_count/ sum(seedling_count)*100)
+
+```
+
+#*Log-Rank tests were used to test for survivorship differences between bay (site) and habitat. 
+
+#*Seeding Heights (Mann-Whitney U tests)
+
+```{r}
+# Take Away Dead
+seed.surv.4mo <- subset(seed.surv.4mo, Tag != 595)
+seed.height.4mo <- seed.surv.4mo %>% 
+  filter(Surv_Sum == "A")
+
+seed.surv.8mo <- subset(seed.surv.8mo, Tag != 595)
+seed.height.8mo <- seed.surv.8mo %>% 
+  filter(Surv_Sum == "A")
+
+seed.surv.12mo <- subset(seed.surv.12mo, Tag != 595)
+seed.height.12mo <- seed.surv.12mo %>% 
+  filter(Surv_Sum == "A")
+View(seed.height.4mo)
+View(seed.height.8mo)
+View(seed.height.12mo)
+# 12 mon only has threee individuals, cannot run test
+```
+##4 mo
+```{r}
+seed.height.4mobayhab.summary <- seed.height.4mo %>%
+  group_by(Bay, Habitat) %>%  
+  summarise(
+    mean_chg = mean(Percent_Change_Per_Day),
+    sd_chg = sd(Percent_Change_Per_Day),
+    sample_size = n(),               # Sample size
+    se_chg = sd_chg / sqrt(n())  # Standard error
+  )
+print(seed.height.4mobayhab.summary)
+```
+
+```{r}
+wilcox.test(Percent_Change_Per_Day ~ Bay, data = seed.height.4mo)  
+wilcox.test(Percent_Change_Per_Day ~ Habitat, data = seed.height.4mo) 
+#not sig
+```
+
+##8 mo
+```{r}
+seed.height.8mobayhab.summary <- seed.height.8mo %>%
+  group_by(Bay, Habitat) %>%  
+  summarise(
+    mean_chg = mean(Percent_Change_Per_Day),
+    sd_chg = sd(Percent_Change_Per_Day),
+    sample_size = n(),               # Sample size
+    se_chg = sd_chg / sqrt(n())  # Standard error
+  )
+print(seed.height.4mobayhab.summary)
+```
+
+```{r}
+wilcox.test(Percent_Change_Per_Day ~ Bay, data = seed.height.8mo)  
+wilcox.test(Percent_Change_Per_Day ~ Habitat, data = seed.height.8mo) 
+#not sig
+```
+
+```{r}
+seed.height.all <- mang_data %>%
+  group_by(NumberMonths) %>% 
+  filter(Surv_Sum == "A")
+
+seed.height.all <- subset(seed.height.all, Percent_Change_Per_Day != "NA")
+seed.height.all <- subset(seed.height.all, Tag != 595)
+```
+
+
+```{r}
+# Calculate mean
+mean_pct_change <- mean(seed.height.all$Percent_Change_Per_Day, na.rm = TRUE)
+
+# Calculate SEM (standard deviation / sqrt(n))
+sem_pct_change <- sd(seed.height.all$Percent_Change_Per_Day, na.rm = TRUE) / 
+                  sqrt(length(na.omit(seed.height.all$Percent_Change_Per_Day)))
+```
+
+```{r}
+seed.height.all.summary <- seed.height.all %>%
+  group_by(NumberMonths, Bay, Habitat) %>%  
+  summarise(
+    mean_chg = mean(Percent_Change_Per_Day),
+    sd_chg = sd(Percent_Change_Per_Day),
+    sample_size = n(),               
+    se_chg = sd_chg / sqrt(n()) 
+  )
+print(seed.height.all.summary)
+```
+
+```{r}
+seed.height.all.summary <- seed.height.all.summary %>%
+  mutate(
+    Label_Y = ifelse(mean_chg > 0, mean_chg + se_chg, mean_chg - se_chg),  
+    Label_Vjust = ifelse(mean_chg > 0, -0.5, 1.5)  
+  )
+print(seed.height.all.summary)
+```
+
+
+```{r}
+plot.heights <- ggplot(seed.height.all.summary, aes(x = Bay, y = mean_chg, fill = Habitat)) +
+  geom_bar(
+    stat = "identity", 
+    width = ifelse(seed.height.all.summary$Bay == "Otter" & 
+                  seed.height.all.summary$NumberMonths == "8", 0.7, 0.7),
+    position = position_dodge(width = 0.7, preserve = "single")  # Fixes bar width consistency
+  ) +
+  geom_errorbar(
+    aes(ymin = mean_chg - se_chg, ymax = mean_chg + se_chg),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7, preserve = "single")
+  ) +
+  geom_text(
+    aes(
+      y = ifelse(is.na(Label_Y), mean_chg + 0.01, Label_Y), # Auto-adjust if NA
+      label = ifelse(sample_size >= 1, paste("n =", sample_size), "")
+    ),
+    position = position_dodge(width = 0.7),
+    vjust = ifelse(seed.height.all.summary$mean_chg >= 0, -0.5, 1.5),  # Standardized label position
+    size = 3,
+    color = "black"
+  ) +
+  coord_cartesian(ylim = c(-0.2, 0.5)) +
+  scale_y_continuous(
+    breaks = scales::pretty_breaks(n = 10),
+    expand = expansion(mult = c(0, 0.05))  # Prevents clipping
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray12") +
+  scale_fill_manual(
+    values = c("pink3", "paleturquoise4"),
+    labels = c("debris" = "Debris", "fringe" = "Fringe"),
+    name = "Habitat Type"  # Legend title
+  ) +
+  facet_wrap(
+    ~NumberMonths,
+    labeller = labeller(NumberMonths = c("4" = "4 Month\nSurvivors", "8" = "8 Month\nSurvivors", "12" = "12 Month\nSurvivors"))
+  ) +
+  labs(
+    y = "Mean Percent Change in Seedling Height Per Day (%)",
+    x = NULL,  
+    caption = "Error bars represent ±1 SE; n values indicate sample sizes"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 5)),
+    strip.background = element_blank(),
+    panel.spacing = unit(1, "lines"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold"),  # Centered bold title
+    legend.position = "right"  # Moves legend above plot
+  )
+
+plot.heights
+```
+
+#*Coral Density (Quasipoisson Generalized Linear Model (GLM))
+### table setup
+
+```{r}
+coral_counts_long <- corals_quad %>%
+  group_by(Quadrat_Code, Year, Bay, Habitat, Class) %>%
+  summarise(
+    Count = n())
+```
+
+```{r}
+#since quadrats are 2m long x 1m wide = 2m^2, divide the count by two to get the number/m^2. 
+coral_density <- coral_counts_long %>%
+  mutate(Density_m2 = Count / 2)
+```
+
+```{r}
+str(coral_density)
+```
+
+```{r}
+coral_density$Quadrat_Code <- as.factor(coral_density$Quadrat_Code)
+coral_density$Year <- as.factor(coral_density$Year)
+coral_density$Bay <- as.factor(coral_density$Bay)
+coral_density$Habitat <- as.factor(coral_density$Habitat)
+coral_density$Class <- as.factor(coral_density$Class)
+```
+
+```{r}
+# Join the quadrats that had zero corals before running stats.
+classes <- tibble(Class = c("juvenile", "adult"))
+
+year <- tibble(Year = c("year_1", "year_2"))
+
+coral_density_full <- coral_quadrats_full %>%
+  select(-Area_m2) %>%  # drop Area column
+  crossing(classes) %>%
+  crossing(year) %>%
+  left_join(coral_density, 
+            by = c("Quadrat_Code", "Year", "Habitat", "Bay", "Class")) %>%
+  mutate(
+    Count = ifelse(is.na(Count), 0, Count),
+    Density_m2 = ifelse(is.na(Density_m2), 0, Density_m2)
+  )
+```
+
+```{r}
+coral_density_full$Quadrat_Code <- as.factor(coral_density_full$Quadrat_Code)
+coral_density_full$Year <- as.factor(coral_density_full$Year)
+coral_density_full$Bay <- as.factor(coral_density_full$Bay)
+coral_density_full$Habitat <- as.factor(coral_density_full$Habitat)
+coral_density_full$Class <- as.factor(coral_density_full$Class)
+```
+
+```{r}
+#remove year two to look at corals found initially (NOTE: I was just looking at coral health over time, not adding new corals to the study, so density should be the same for both years (minus those that died))
+
+coral_density1 <- coral_density_full %>% 
+filter(Year == "year_1")
+```
+
+
+### Stats
+
+```{r}
+shapiro.test(coral_density_full$Density_m2)
+```
+
+```{r}
+kruskal.test(Density_m2 ~ Habitat, data = coral_density_full)
+kruskal.test(Density_m2 ~ Bay, data = coral_density_full)
+kruskal.test(Density_m2 ~ Year, data = coral_density_full)
+kruskal.test(Density_m2 ~ Class, data = coral_density_full)
+```
+
+#### sig by Habitat
+```{r}
+coral.den.overall.sum.hab <- coral_density_full %>%
+  group_by(Habitat) %>%  
+  summarise(
+    mean_chg = mean(Density_m2),  
+    sd_chg = sd(Density_m2),      
+    total_density = sum(Density_m2), 
+    total_count = sum(Count), 
+    se_chg = sd_chg / sqrt(n()),
+    min_chg = min(Density_m2, na.rm = TRUE),
+    max_chg = max(Density_m2, na.rm = TRUE),
+    range_chg = max_chg - min_chg
+  )%>%
+  mutate(label_y = mean_chg + se_chg + 0.5)
+print(coral.den.overall.sum.hab)
+```
+
+```{r}
+#plot for basal area
+coral.den.overall.sum.hab <- coral_density_full %>%
+  group_by(Habitat) %>% 
+  summarise(
+    mean = mean(Density_m2),  
+    sd = sd(Density_m2),     
+    sample_size = sum(Count), 
+    total = sum(Density_m2),
+    se = sd / sqrt(n())
+    
+  )
+
+print(coral.den.overall.sum.hab)
+```
+
+
+```{r}
+coral.den.overall.sum.hab <- coral.den.overall.sum.hab %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  
+    labels = c("a", "b")
+  )
+print(coral.den.overall.sum.hab)
+```
+
+
+```{r}
+plot.coral.den.overall.hab <- ggplot(coral.den.overall.sum.hab, aes(x = Habitat, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "paleturquoise4") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = coral.den.overall.sum.hab$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_x_discrete(label = c("debris"= "Debris", "fringe" = "Fringe"))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=5)) +
+  coord_cartesian(ylim = c(0, 5)) +
+  labs(
+    title = "",
+    x = "",
+    y = "Average Coral Density (corals/m²)"
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.coral.den.overall.hab
+```
+
+### GLM
+```{r}
+glm_coral_den <- glm(Density_m2 ~ Class + Bay + Habitat, data = coral_density_full, family = "poisson")
+summary(glm_coral_den)
+#not sig
+```
+
+```{r}
+#test for overdispersion (Variance > Mean)
+overdispersion_ratio_coralden <- sum(residuals(glm_coral_den, type = "pearson")^2) / df.residual(glm_coral_den)
+print(overdispersion_ratio_coralden)
+
+# 3.7, overdisp
+```
+
+```{r}
+glm_coralden_overdisp <- glm(Density_m2 ~ Class + Bay + Habitat, data = coral_density_full, family = quasipoisson)
+summary(glm_coralden_overdisp)
+
+```
+
+```{r}
+kruskal.test(Density_m2 ~ Bay, data = coral_density_full)
+kruskal.test(Density_m2 ~ Habitat, data = coral_density_full)
+```
+
+### table setup
+### Quad
+```{r}
+coral.den.sum.quad <- coral_density_full %>%
+  group_by(Quadrat_Code, Class) %>%  
+  summarise(
+    mean_chg = mean(Density_m2),  
+    sd_chg = sd(Density_m2),      
+    total_density = sum(Density_m2), 
+    total_count = sum(Count), 
+    se_chg = sd_chg / sqrt(n()),
+    min_chg = min(Density_m2, na.rm = TRUE),
+    max_chg = max(Density_m2, na.rm = TRUE),
+    range_chg = max_chg - min_chg
+  )%>%
+  mutate(label_y = mean_chg + se_chg + 0.5)
+print(coral.den.sum.quad)
+```
+
+### habitat
+```{r}
+coral.den.sum.hab <- coral_density_full %>%
+  group_by(Habitat, Class) %>%  
+  summarise(
+    mean_chg = mean(Density_m2),  
+    sd_chg = sd(Density_m2),      
+    total_density = sum(Density_m2), 
+    total_count = sum(Count),              
+    se_chg = sd_chg / sqrt(n()),
+    min_chg = min(Density_m2, na.rm = TRUE),
+    max_chg = max(Density_m2, na.rm = TRUE),
+    range_chg = max_chg - min_chg
+  )%>%
+  mutate(label_y = mean_chg + se_chg + 0.5)
+print(coral.den.sum.hab)
+```
+
+### bay
+```{r}
+coral.den.sum.bay <- coral_density_full %>%
+  group_by(Bay, Class) %>%  
+  summarise(
+    mean_chg = mean(Density_m2),  
+    sd_chg = sd(Density_m2),      
+    total_density = sum(Density_m2), 
+    total_count = sum(Count),               
+    se_chg = sd_chg / sqrt(n()),
+    min_chg = min(Density_m2, na.rm = TRUE),
+    max_chg = max(Density_m2, na.rm = TRUE),
+    range_chg = max_chg - min_chg
+  )%>%
+  mutate(label_y = mean_chg + se_chg + 0.5)
+print(coral.den.sum.bay)
+```
+
+### plot
+### Quad
+```{r}
+coral.den.quad.plot <- ggplot(coral.den.sum.quad, aes(x = Quadrat_Code, y = mean_chg, fill= Class)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge()) + 
+  geom_errorbar(
+    aes(ymin = mean_chg - se_chg, ymax = mean_chg + se_chg), 
+    width = 0.2,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  coord_cartesian(ylim = c(0,20))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  scale_fill_manual(
+    values=c("azure4", "bisque4"), 
+      labels = c("Juvenile", "Adult"),
+      name = NULL) +
+  labs(
+    x = "",
+    y = "Average Coral Density (corals/m²)"
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+print(coral.den.quad.plot)
+```
+
+### habitat
+```{r}
+coral.den.hab.plot <- ggplot(coral.den.sum.hab, aes(x = Habitat, y = mean_chg, fill= Class)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge()) + 
+  geom_errorbar(
+    aes(ymin = mean_chg - se_chg, ymax = mean_chg + se_chg), 
+    width = 0.2,  
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+      geom_text(
+    aes(y = label_y, label = paste0("n = ", total_count)), 
+    position = position_dodge(width = 0.7),
+    vjust = 0,
+    size = 4
+  ) +
+  coord_cartesian(ylim = c(0,12))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  scale_fill_manual(
+    values=c("azure4", "bisque4"),
+    labels = c("Juvenile", "Adult"),
+    name=NULL) +
+  labs(
+    x = "",
+    y = "Average Density of Corals (m²"
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+print(coral.den.hab.plot)
+```
+
+### bay
+```{r}
+coral.den.bay.plot <- ggplot(coral.den.sum.bay, aes(x = Bay, y = mean_chg, fill= Class)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge()) +  
+  geom_errorbar(
+    aes(ymin = mean_chg - se_chg, ymax = mean_chg + se_chg),  
+    width = 0.2,  
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+      geom_text(
+    aes(y = label_y, label = paste0("n = ", total_count)), 
+    position = position_dodge(width = 0.7),
+    vjust = 0,
+    size = 4
+  ) +
+  coord_cartesian(ylim = c(0,18))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  scale_fill_manual(
+    values=c("azure4", "bisque4"),
+    labels = c("Juvenile", "Adult"),
+    name=NULL) +
+  labs(
+    x = "",
+    y = "Average Density of Corals (m²)"
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+print(coral.den.bay.plot)
+```
+
+#*Coral Species
+
+```{r}
+corals_quad <- corals_quad %>%
+  mutate(Genus = case_when(
+    SPP == "AAGR" ~ "Agaricia",
+    SPP == "AGSP" ~ "Agaricia",
+    SPP == "SSID" ~ "Siderastrea",
+    SPP == "SRAD" ~ "Siderastrea",
+    SPP == "PAST" ~ "Porites",
+    SPP == "PPOR" ~ "Porites",
+    SPP == "OANN" ~ "Orbicella",
+    SPP == "ORSP" ~ "Orbicella",
+    SPP == "SINT" ~ "Stephanocoenia",
+    SPP == "MARE" ~ "Manicina",
+    TRUE ~ "Other"   # a catch-all for anything not listed
+  ))
+```
+
+```{r}
+corals_genus <- corals_quad %>%
+  group_by(Quadrat_Code, Year, Bay, Habitat, Genus) %>%
+  summarise(count = n(), 
+            density = count /2,
+            .groups = "drop")
+```
+
+```{r}
+# Define the two classes
+genus <- tibble(Genus = c("Agaricia", "Siderastrea", "Porites", "Orbicella", "Stephanocoenia", "Manicina"))
+
+year <- tibble(Year = c("year_1", "year_2"))
+
+corals_genus_full <- coral_quadrats_full %>%
+  select(-Area_m2) %>%                              
+  crossing(genus) %>%
+  crossing(year) %>%
+  left_join(corals_genus, 
+            by = c("Quadrat_Code", "Year", "Habitat", "Bay", "Genus")) %>%
+  mutate(
+    count = ifelse(is.na(count), 0, count),
+    density = ifelse(is.na(density), 0, density)
+  )
+```
+
+
+```{r}
+corals_genus1 <- corals_genus_full %>% 
+  filter(Year == "year_1")
+```
+
+
+```{r}
+corals_genus1$Quadrat_Code <- as.factor(corals_genus1$Quadrat_Code)
+corals_genus1$Bay <- as.factor(corals_genus1$Bay)
+corals_genus1$Habitat <- as.factor(corals_genus1$Habitat)
+corals_genus1$Genus <- as.factor(corals_genus1$Genus)
+```
+
+```{r}
+shapiro.test(corals_genus1$density)
+```
+
+```{r}
+kruskal.test(density ~ Genus, data = corals_genus1)
+```
+
+```{r}
+#with zero quadrats included
+coral_genus_wide_zeros <- corals_genus1 %>%
+  pivot_wider(names_from = Genus, values_from = density, values_fill = 0)
+```
+
+```{r}
+#zeros dropped
+coral_genus_wide <- corals_genus1 %>%
+  pivot_wider(names_from = Genus, values_from = density, values_fill = 0) %>% 
+   filter(count != 0)
+```
+
+
+```{r}
+# Extract the response matrix (percent cover of organism types)
+response_matrix_coralgenus <- coral_genus_wide[, c("Agaricia", "Siderastrea", "Porites", "Orbicella", "Stephanocoenia", "Manicina")]
+
+# Extract the predictors (Habitat and Site)
+predictors_coralgenus <- coral_genus_wide[, c("Habitat", "Bay")]
+```
+
+```{r}
+# Run PERMANOVA
+permanova_result_coralgenus <- adonis2(response_matrix_coralgenus ~ Habitat * Bay, data = predictors_coralgenus, permutations = 999, method = "bray")
+
+# View the results
+print(permanova_result_coralgenus)
+#            Df SumOfSqs      R2      F Pr(>F)
+#Habitat      1   0.2218 0.02806 0.5163  0.824
+#Bay          1   0.1812 0.02293 0.4219  0.879
+#Habitat:Bay  1   0.1979 0.02504 0.4606  0.919
+#Residual    17   7.3019 0.92397              
+#Total       20   7.9027 1.00000     
+```
+
+```{r}
+coral.genus.sum.quad <- corals_genus1 %>%
+  group_by(Quadrat_Code, Genus) %>% 
+  summarise(
+    mean = mean(density),  
+    total_density = sum(density))
+print(coral.genus.sum.quad)
+```
+
+
+```{r}
+coral.genus.plot <- ggplot(coral.genus.sum.quad, aes(x = Quadrat_Code, y = mean, fill= Genus)) +
+  geom_bar(stat = "identity", width = 0.7) + 
+  coord_cartesian(ylim = c(0,25))+
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=8)) +
+  scale_fill_manual(
+    values=c("coral3", "yellow3", "yellowgreen", "goldenrod3", "indianred4", "plum4")) +
+  labs(
+    x = "",
+    y = "Average Coral Density (corals/m²)"
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+print(coral.genus.plot)
+```
+
+
+#### percent cover
+
+```{r}
+corals_percent <- corals_quad %>%
+  group_by(Quadrat_Code, Genus) %>%
+  summarise(count = n(), 
+            .groups = "drop")
+```
+
+
+```{r}
+corals_percent <- corals_percent %>%
+  group_by(Quadrat_Code) %>%
+  mutate(total_in_quadrat = sum(count, na.rm = TRUE),
+         percent = (count / total_in_quadrat) * 100) %>%
+  ungroup()
+
+
+```
+
+```{r}
+genus_percent_summary <- corals_percent %>%
+  group_by(Genus) %>%
+  summarise(
+    mean_percent = mean(percent, na.rm = TRUE),
+    sd_percent   = sd(percent, na.rm = TRUE),
+    n            = n(),
+    sem_percent  = sd_percent / sqrt(n)
+  )
+```
+
+```{r}
+genus_total <- corals_percent %>%
+  group_by(Genus) %>%
+  summarise(total_count = sum(count, na.rm = TRUE)) %>%
+  mutate(percent_total = total_count / sum(total_count) * 100) %>%
+  arrange(desc(percent_total))
+
+genus_total
+```
+
+#download table for paper
+```{r}
+corals_summary_table <- corals_quad %>%
+  group_by(Quadrat_Code, Year, Bay, Habitat, Genus, Class) %>%
+  summarise(count = n(), 
+            density = count /2,
+            .groups = "drop")
+```
+
+```{r}
+# Define the two classes
+genus <- tibble(Genus = c("Agaricia", "Siderastrea", "Porites", "Orbicella", "Stephanocoenia", "Manicina"))
+
+year <- tibble(Year = c("year_1", "year_2"))
+
+classes <- tibble(Class = c("juvenile", "adult"))
+
+corals_summary_table <- coral_quadrats_full %>%
+  select(-Area_m2) %>%                             
+  crossing(genus) %>%
+  crossing(year) %>%
+  crossing(classes) %>%
+  left_join(corals_summary_table, 
+            by = c("Quadrat_Code", "Year", "Habitat", "Bay", "Genus", "Class")) %>%
+  mutate(
+    count = ifelse(is.na(count), 0, count),
+    density = ifelse(is.na(density), 0, density)
+  )
+```
+
+```{r}
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with your desired folder path
+file_name <- "corals_summary_table.csv"                  # Replace with your desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(corals_summary_table, path = full_path)
+```
+
+#*Coral Surface Area (LMM; Since corals found in Water Creek fringe habitats (WCS2 only) were not measured for surface area, an LMM was used to test for differences in the bay effect (from debris only) and habitat type effect (from Otter Creek only) for coral surface area)
+
+```{r}
+# If Surface_Area is a factor, convert it to character first
+corals_quad$Surface_Area <- as.character(corals_quad$Surface_Area)
+
+# Remove rows with actual NA or string "NA" or "CNL"
+coral_surface_area <- subset(corals_quad, !is.na(Surface_Area) & !(Surface_Area %in% c("NA", "CNL")))
+
+```
+
+
+```{r}
+coral_surface_area$Surface_Area <- as.numeric(coral_surface_area$Surface_Area)
+```
+
+## Normality (none normal)
+```{r}
+shapiro.test(coral_surface_area$Surface_Area[coral_surface_area$Bay == "Otter Creek"])
+shapiro.test(coral_surface_area$Surface_Area[coral_surface_area$Bay == "Water Creek"])
+# NOT NORMAL
+```
+
+```{r}
+shapiro.test(coral_surface_area$Surface_Area[coral_surface_area$Year == "year_1"])
+shapiro.test(coral_surface_area$Surface_Area[coral_surface_area$Year == "year_2"])
+# NOT NORMAL
+```
+
+```{r}
+shapiro.test(coral_surface_area$Surface_Area[coral_surface_area$Habitat == "debris"])
+shapiro.test(coral_surface_area$Surface_Area[coral_surface_area$Habitat == "fringe"])
+# NOT NORMAL
+```
+
+## wilcox test
+```{r}
+wilcox.test(Surface_Area ~ Year, data = coral_surface_area)
+#W = 3315, p-value = 0.4515
+wilcox.test(Surface_Area ~ Habitat, data = coral_surface_area)
+#W = 1540, p-value = 9.868e-06
+wilcox.test(Surface_Area ~ Bay, data = coral_surface_area)
+#W = 5507, p-value = 8.465e-07
+
+```
+
+## GLM
+
+### year 1
+
+```{r}
+coral_sa1 <- coral_surface_area %>% 
+filter(Year == "year_1")
+```
+
+
+```{r}
+coral_sa1$Quadrat_Code <- as.factor(coral_sa1$Quadrat_Code)
+coral_sa1$Bay <- as.factor(coral_sa1$Bay)
+coral_sa1$Habitat <- as.factor(coral_sa1$Habitat)
+coral_sa1$Genus <- as.factor(coral_sa1$Genus)
+```
+
+
+```{r}
+#Year 2
+coral_sa2 <- coral_surface_area %>% 
+filter(Year == "year_2")
+```
+
+```{r}
+glm_coral_sa <- glm(Surface_Area ~ Habitat + Bay, data = coral_sa1, family = "poisson")
+summary(glm_coral_sa)
+#are these overdisposed?
+```
+
+```{r}
+#test for overdispersion (Variance > Mean)
+overdispersion_ratio_coralsa1 <- sum(residuals(glm_coral_sa, type = "pearson")^2) / df.residual(glm_coral_sa)
+print(overdispersion_ratio_coralsa1)
+
+# 4, overdisp
+```
+
+```{r}
+glm_coral_saoverdisp1 <- glm(Surface_Area ~ Bay * Habitat + Class, data = coral_sa1, family = quasipoisson)
+summary(glm_coral_saoverdisp1)
+
+```
+
+```{r}
+kruskal.test(Surface_Area ~ Bay, data = coral_sa1)
+kruskal.test(Surface_Area ~ Habitat, data = coral_sa1)
+```
+
+```{r}
+wilcox.test(Surface_Area ~ Bay, data = coral_sa1)
+wilcox.test(Surface_Area ~ Habitat, data = coral_sa1)
+```
+
+```{r}
+library(lme4)
+library(lmerTest)
+
+```
+
+
+```{r}
+model_bay <- lmer(Surface_Area ~ Habitat * Bay + Class + (1 | Quadrat_Code), data = coral_sa1)
+summary(model_bay)
+```
+
+```{r}
+model_hab <- lmer(Surface_Area ~ Bay * Class + (1 | Quadrat_Code), data = coral_sa1)
+summary(model_hab)
+```
+
+```{r}
+library(lme4)
+library(lmerTest)
+
+#Since Water Creek does not have any fringing corals, we must compare this dataset only using otter for hab differences, and debris sites for bays differences.
+
+#Separate Otter to test for Habitat:
+otter <- subset(coral_sa1, Bay == "Otter Creek")
+model_coralsa_hab <- lmer(Surface_Area ~ Habitat + (1 | Quadrat_Code), data = otter)
+summary(model_coralsa_hab)
+
+#Separate Debris to test for Bay:
+debris <- subset(coral_sa1, Habitat == "debris")
+model_coralsa_bay <- lmer(Surface_Area ~ Bay + (1 | Quadrat_Code), data = debris)
+summary(model_coralsa_bay)
+```
+
+```{r}
+model_h1_class <- lmer(Surface_Area ~ Habitat + Class + (1 | Quadrat_Code), data = otter)
+model_h2_class <- lmer(Surface_Area ~ Bay + Class + (1 | Quadrat_Code), data = debris)
+
+```
+
+## plots
+
+### plot Habitat
+```{r}
+#plot for basal area
+coral_sa_hab_sum <- coral_surface_area %>%
+  group_by(Habitat) %>% 
+  summarise(
+    mean = mean(Surface_Area),  
+    sd = sd(Surface_Area),     
+    sample_size = n(), 
+    total = sum(Surface_Area),
+    se = sd / sqrt(n())
+    
+  )
+
+print(coral_sa_hab_sum)
+```
+
+
+```{r}
+coral_sa_hab_sum <- coral_sa_hab_sum %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se), 
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  
+    labels = c("a", "b")
+  )
+print(coral_sa_hab_sum)
+```
+
+
+```{r}
+plot.coral.sa.hab <- ggplot(coral_sa_hab_sum, aes(x = Habitat, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "cadetblue") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = coral_sa_hab_sum$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  scale_x_discrete(label = c("debris"= "Debris", "fringe" = "Fringe"))+
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(
+    title = "",
+    x = "",
+    y = "Mean Surface Area (cm²) ± SEM "
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.coral.sa.hab
+```
+
+### plot Bay
+
+```{r}
+coral_bay_debrisonly <- coral_surface_area %>% 
+filter(Habitat == "debris")
+```
+
+```{r}
+#plot for basal area
+coral_sa_bay_sum <- coral_bay_debrisonly %>%
+  group_by(Bay) %>% 
+  summarise(
+    mean = mean(Surface_Area),  
+    sd = sd(Surface_Area),     
+    sample_size = n(), 
+    total = sum(Surface_Area),
+    se = sd / sqrt(n())
+    
+  )
+
+print(coral_sa_bay_sum)
+```
+
+
+```{r}
+coral_sa_bay_sum <- coral_sa_bay_sum %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),  
+    labels = c("a", "b")
+  )
+print(coral_sa_bay_sum)
+```
+
+
+```{r}
+plot.coral.sa.bay <- ggplot(coral_sa_bay_sum, aes(x = Bay, y = mean)) +
+  geom_bar(stat = "identity", width = 0.7, position = position_dodge(), fill = "cadetblue") +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width = 0.1,
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = labels),  
+    position = position_dodge(.7),
+    vjust = coral_sa_bay_sum$Label_Vjust,
+    size = 5,
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n=10)) +
+  coord_cartesian(ylim = c(0, 65)) +
+  labs(
+    title = "",
+    x = "",
+    y = "Debris Habitat Mean Surface Area (cm²) ± SEM "
+  ) +
+  theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  plot.title = element_text(hjust = 0.5))
+plot.coral.sa.bay
+```
+
+#*Coral recruitment (Poisson GLM) 
+
+```{r}
+#Need to use raw recruit number (not ranked) using TILES not ARRAYS. Run a GLM with site and hab type.
+
+shapiro.test(recruit_tile_full$Recruits)
+#W = 0.44857, p-value = 3.495e-12
+```
+
+
+```{r}
+#use file recruit_tile_full.csv and make bay and habitat factors before running GLM
+recruit_tile_full$Bay <- as.factor(recruit_tile_full$Bay)
+recruit_tile_full$Habitat <- as.factor(recruit_tile_full$Habitat)
+```
+
+```{r}
+glm_recruit <- glm(Recruits ~ Bay + Habitat, data = recruit_tile_full, family = poisson)
+
+summary(glm_recruit)
+
+#Not to use-- use lower. Interpretation: There is no statistically significant difference in recruits between Water and Otter Creeks (p= 0.1867) or Fringe and Debris habitat types (p= 0.0825). However, we could explore the interaction between Bay and Habitat to see if the effect of habitat differs by bay (see the recruit interaction in code below...)
+```
+
+```{r}
+glm_recruit_interaction <- glm(Recruits ~ Bay * Habitat, data = recruit_tile_full, family = poisson)
+summary(glm_recruit_interaction)
+
+# Interpretation: For debris habitat, there is no significant difference in coral recruits between Water and Otter Creeks (p = 0.4235). In Otter Creek, the fringing habitat type has significantly more coral recruits than debris habitat (p= 0.0266)! 
+```
+
+
+```{r}
+# Check for overdispersion (variance > mean) to see if Negative GLM is better to use?
+library(AER)
+dispersiontest(glm_recruit)
+#data:  glm_recruit
+#z = 0.76241, p-value = 0.2229
+#alternative hypothesis: true dispersion is greater than 1
+#sample estimates:
+#dispersion 
+#  1.462454 
+#This is only MILDY greater than 1, so can try a negative binomial GLM but the Poisson GLM should be fine.
+```
+
+```{r}
+# Using Negative Binomial GLM because the residual deviance is high, this still results in the same significance, so may as well stick with the Poisson GLM?
+library(MASS)
+
+# Fit a Negative Binomial GLM
+nb_recruit_model <- glm.nb(Recruits ~ Bay + Habitat, data = recruit_tile_full)
+
+# Summarize the model
+summary(nb_recruit_model)
+```
+
+```{r}
+nb_recruit_interaction <- glm.nb(Recruits ~ Bay * Habitat, data = recruit_tile_full)
+summary(nb_recruit_interaction)
+```
+
+```{r}
+#plot for coral recruits
+recruit.plot.summary <- recruit_tile_full %>%
+  group_by(Bay, Habitat) %>% 
+  summarise(
+    mean = mean(Recruits),  
+    sd = sd(Recruits),     
+    sample_size = n(), 
+    total_recruits = sum(Recruits),
+    se = sd / sqrt(n())  
+  )
+
+print(recruit.plot.summary)
+```
+
+
+```{r}
+recruit.plot.summary <- recruit.plot.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5)  
+  )
+print(recruit.plot.summary)
+```
+
+
+```{r}
+plot.recruit <- ggplot(recruit.plot.summary, aes(x = Bay, y = mean, fill= Habitat)) +
+  geom_bar(stat = "identity", width = 0.7,position = position_dodge()) +  
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se), 
+    width = 0.1, 
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = paste("n =", total_recruits)), 
+    position = position_dodge(.7),  
+    vjust = recruit.plot.summary$Label_Vjust,  
+    size = 3,  
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0,1.65))+
+  scale_fill_manual(values=c("peachpuff3", "darkolivegreen4"),
+                    name="Habitat Type") +
+  labs(
+    x = "Bay (Creek)",
+    y = "Mean Number of Coral Recruits (n) in Hurricane Hole (± SEM)"
+  ) +
+    theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank()) +
+  annotate("segment", x = 0.7, xend = 1.3, y = max(recruit.plot.summary$mean) * 1.60, yend = max(recruit.plot.summary$mean) * 1.60,
+           color = "black", size = 1) +
+  annotate("text", x = 1, y = max(recruit.plot.summary$mean) * 1.62, label = "*", size = 6, color = "black")
+plot.recruit
+
+```
+
+```{r}
+#Make table for coral recruits
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with your desired folder path
+file_name <- "recruit.tile.table.csv"                  # Replace with your desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(recruit_tile_full, path = full_path)
+```
+
+#*Benthic Composition (two-way PERMANOVA) 
+
+## organize data
+
+```{r}
+library(dplyr)
+#use "category2" from benthic_ref to replace abbreviated names in the "first_hit" and "last_hit" columns. To stop conflict with other packages, specify dplyr with "dplyr::"
+benthic <- benthic %>%
+  left_join(select(benthic_ref, Abbreviation, Category2), 
+            by = c("First_Hit" = "Abbreviation")) %>%
+  rename(First_Hitadj = Category2)
+
+```
+
+
+```{r}
+#same for last hit
+benthic <- benthic %>%
+  left_join(select(benthic_ref, Abbreviation, Category2), 
+            by = c("Last_Hit" = "Abbreviation")) %>%
+  rename(Last_Hitadj = Category2)
+```
+
+```{r}
+#make sure no NA's
+sum(is.na(benthic$Last_Hitadj))
+sum(is.na(benthic$First_Hitadj))
+```
+##First Hit
+```{r}
+#Calc percentages
+benthic_cover_first <- benthic %>%
+  group_by(Bay, Habitat, quadrat_code, Monitoring_Year, First_Hitadj) %>%  
+  summarise(Count = n()) %>%             
+  mutate(Percent_Cover = (Count / 45) * 100) %>%  
+  arrange(quadrat_code, desc(Percent_Cover))  
+
+View(benthic_cover_first)
+```
+
+```{r}
+#change the name of Sand, etc. column (for graphing purposes) 
+benthic_cover_first <- benthic_cover_first %>%
+  mutate(First_Hitadj = ifelse(First_Hitadj == "Sand, etc.", "Sand, Silt, Detritus", First_Hitadj))
+```
+
+
+```{r}
+benthic_cover_first_wide <- benthic_cover_first %>%
+  select(-Count) %>%
+  pivot_wider(names_from = First_Hitadj, 
+              values_from = Percent_Cover,
+              values_fill = 0)  # Replace NA with 0 for types not observed
+
+
+View(benthic_cover_first_wide)
+```
+
+```{r}
+#change column header names
+colnames(benthic_cover_first_wide)[5] <- "sand_etc"
+colnames(benthic_cover_first_wide)[7] <- "other_living"
+colnames(benthic_cover_first_wide)[9] <- "turf"
+colnames(benthic_cover_first_wide)[10] <- "living_mangrove"
+colnames(benthic_cover_first_wide)[14] <- "dead_mangrove"
+colnames(benthic_cover_first_wide)[16] <- "hard_bottom"
+View(benthic_cover_first_wide)
+```
+
+```{r}
+benthic_cover_first$Monitoring_Year <- as.factor(benthic_cover_first$Monitoring_Year)
+```
+
+### plot for visit year
+```{r}
+#plot for VISIT YEAR
+plot_benthic_cover_first_wide <- ggplot(benthic_cover_first, 
+       aes(x = First_Hitadj, y = Percent_Cover, fill = Monitoring_Year)) +
+  geom_bar(stat = "identity", 
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +  
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  
+    axis.ticks.length.x = unit(0.3, "cm") 
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 10), 
+    expand = expansion(mult = c(0, 0.05))  
+  ) +
+  scale_x_discrete(
+    expand = expansion(add = 1), 
+    labels = function(First_Hitadj) str_wrap(First_Hitadj, width = 10)
+  ) +
+  coord_cartesian(ylim = c(0, 80)) +
+  labs(y = "Mean Percent Cover (± SEM)") +
+  guides(fill = guide_legend(title = "Visit Number"))
+plot_benthic_cover_first_wide
+```
+
+### plot for Habitat
+```{r}
+#plot for Habitat
+plot_benthic_cover_first_wide <- ggplot(benthic_cover_first, 
+       aes(x = First_Hitadj, y = Percent_Cover, fill = Habitat)) +
+  geom_bar(stat = "identity", 
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +  
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  
+    axis.ticks.length.x = unit(0.3, "cm")  
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 10), 
+    expand = expansion(mult = c(0, 0.05))  
+  ) +
+  scale_x_discrete(
+    expand = expansion(add = 1),  
+    labels = function(First_Hitadj) str_wrap(First_Hitadj, width = 10)
+  ) +
+  coord_cartesian(ylim = c(0, 80)) +
+  labs(y = "Mean Percent Cover (± SEM)") +
+  guides(fill = guide_legend(title = "Habitat Type"))
+plot_benthic_cover_first_wide
+```
+
+### plot for Bay
+```{r}
+#plot for Bay
+plot_benthic_cover_first_wide <- ggplot(benthic_cover_first, 
+       aes(x = First_Hitadj, y = Percent_Cover, fill = Bay)) +
+  geom_bar(stat = "identity", 
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +  
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  
+    axis.ticks.length.x = unit(0.3, "cm")  
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 10), 
+    expand = expansion(mult = c(0, 0.05)) 
+  ) +
+  scale_x_discrete(
+    expand = expansion(add = 1),  
+    labels = function(First_Hitadj) str_wrap(First_Hitadj, width = 10)
+  ) +
+  coord_cartesian(ylim = c(0, 80)) +
+  labs(y = "Mean Percent Cover (± SEM)") +
+  guides(fill = guide_legend(title = "Bay"))
+plot_benthic_cover_first_wide
+```
+## run a permanova
+```{r}
+# Extract the response matrix (percent cover of organism types)
+response_matrix_benthic1 <- benthic_cover_first_wide[, c("sand_etc", "Sponge", "turf", "Seagrass", "living_mangrove", "other_living", "Macroalgae", "Rubble","Coral", "dead_mangrove","CCA","hard_bottom")]
+
+# Extract the predictors (Habitat and Site)
+predictors_benthic1 <- benthic_cover_first_wide[, c("Habitat", "Bay", "Monitoring_Year")]
+```
+
+```{r}
+# Run PERMANOVA
+permanova_result_benthic1 <- adonis2(response_matrix_benthic1 ~ Habitat * Bay + Monitoring_Year, data = predictors_benthic1, permutations = 999, method = "bray")
+
+
+print(permanova_result_benthic1)
+
+#                Df SumOfSqs      R2       F Pr(>F)    
+#Habitat          1  0.75076 0.28092 10.1132  0.001 ***
+#Bay              1  0.12636 0.04728  1.7021  0.180    
+#Monitoring_Year  1  0.10409 0.03895  1.4022  0.233    
+#Habitat:Bay      1  0.28084 0.10509  3.7831  0.024 *  
+#Residual        19  1.41047 0.52777                   
+#Total           23  2.67253 1.00000 
+```
+
+##print table
+```{r}
+library(knitr)
+
+# Convert PERMANOVA results to a clean dataframe
+permanova_benthic1_table <- data.frame(
+  Term = c("Habitat", "Bay", "Monitoring Year", "Habitat × Bay", "Residual", "Total"),
+  Df = c(1, 1, 1, 1, 19, 23),
+  SumOfSqs = c(0.751, 0.126, 0.104, 0.281, 1.410, 2.673),
+  R2 = c(0.281, 0.047, 0.039, 0.105, 0.528, 1.000),
+  F = c(10.113, 1.702, 1.402, 3.783, NA, NA),
+  p = c("0.001***", "0.180", "0.233", "0.024*", "", "")
+)
+
+# Print 
+kable(permanova_benthic1_table, align = "c", caption = "PERMANOVA Results for Benthic Cover Types")
+```
+
+```{r}
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with your desired folder path
+file_name <- "benthic1_permanova_results.csv"                  # Replace with your desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(permanova_benthic1_table, path = full_path)
+```
+
+##First Hit HABITAT
+###Visualize using NMDS
+```{r}
+# Perform NMDS
+nmds_benthic1_result <- metaMDS(response_matrix_benthic1, distance = "bray")
+
+# Plot 
+plot(nmds_benthic1_result, type = "n")
+points(nmds_benthic1_result, col = as.numeric(as.factor(predictors_benthic1$Habitat)), pch = 16)
+ordihull(nmds_benthic1_result, groups = predictors_benthic1$Habitat, draw = "polygon", col = "blue", alpha = 0.2)
+legend("topright", legend = levels(as.factor(predictors_benthic1$Habitat)), col = 1:2, pch = 16)
+```
+
+```{r}
+# Run NMDS
+nmds_benthic1_hab_bay_result <- metaMDS(response_matrix_benthic1, distance = "bray")
+# Plot
+ ggplot(data.frame(NMDS1 = nmds_benthic1_hab_bay_result$points[,1], NMDS2 = nmds_benthic1_hab_bay_result$points[,2], 
+                  Habitat = predictors_benthic1$Habitat,
+                  Bay = predictors_benthic1$Bay),
+        aes(x = NMDS1, y = NMDS2, color = Habitat, shape = Bay)) +
+   geom_point(size = 3) +
+   stat_ellipse(aes(group = Habitat), level = 0.95) +
+   scale_color_manual(values = c("Fringe" = "blue", "Debris" = "red")) +
+   theme_classic()
+```
+
+###follow-up with a SIMPER
+```{r}
+simper_benthic1_result <- simper(response_matrix_benthic1, predictors_benthic1$Habitat)
+summary(simper_benthic1_result)
+#Contrast: Fringe_Debris 
+
+#                 average       sd    ratio      ava      avb cumsum     p    
+#Macroalgae       0.16111  0.10125  1.59120 23.88900 54.26000  0.316 0.001 ***
+#sand_etc         0.10324  0.07124  1.44930 30.18500 10.19000  0.518 0.001 ***
+#Seagrass         0.07963  0.06197  1.28500 14.25900 13.33000  0.674 0.641    
+#turf             0.06404  0.04246  1.50840 17.03700 12.96000  0.800 0.272    
+#dead_mangrove    0.02238  0.02437  0.91820  0.37000  4.44000  0.844 0.009 ** 
+#Sponge           0.01975  0.02495  0.79180  4.25900  1.11000  0.882 0.043 *  
+#other_living     0.01944  0.02067  0.94060  4.07400  0.56000  0.920 0.004 ** 
+#living_mangrove  0.01574  0.02553  0.61650  3.14800  0.00000  0.951 0.001 ***
+#Coral            0.01157  0.01402  0.82540  1.85200  1.11000  0.974 0.505    
+#Rubble           0.00957  0.01553  0.61620  0.92600  1.30000  0.993 0.611    
+#hard_bottom      0.00278  0.00664  0.41860  0.00000  0.56000  0.998 0.001 ***
+#CCA              0.00093  0.00308  0.30050  0.00000  0.19000  1.000 0.001 ***
+ 
+```
+
+
+#### SIMPER plot
+#####Bar chat of benthic first hit cover
+```{r}
+first.hit.benthic.summary <- benthic_cover_first %>%
+  group_by(First_Hitadj, Habitat) %>% 
+  summarise(
+    mean = mean(Percent_Cover),  
+    sd = sd(Percent_Cover),     
+    sample_size = n(), 
+    se = sd / sqrt(n())  
+  )
+
+View(first.hit.benthic.summary)
+```
+
+
+```{r}
+first.hit.benthic.summary <- first.hit.benthic.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5) 
+  )
+print(first.hit.benthic.summary)
+```
+
+
+```{r}
+plot.first.hit.benthic <- ggplot(first.hit.benthic.summary, aes(x = First_Hitadj, y = mean, fill = Habitat)) +
+  geom_bar(stat = "identity", width = 0.7,position = position_dodge()) +  
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),  
+    width = 0.1,  
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10), 
+    expand = expansion(mult = c(0.0, 0.0))
+    ) +
+  scale_x_discrete(expand = expansion(add = c(0.5, 0.5)), labels = function(First_Hitadj) str_wrap(First_Hitadj, width = 10))+
+  coord_cartesian(ylim = c(0,65))+
+  scale_fill_manual(values=c("antiquewhite3", "darkorange4"),
+                    name="Habitat") +
+  labs(
+    x = "",
+    y = "Mean Percent Cover (± SEM)"
+  ) +
+  theme(
+    text = element_text(size = 12, family = "sans"),  
+    plot.title = element_text(size = 12),              
+    axis.title = element_text(size = 12),              
+    axis.text = element_text(size = 12),               
+    legend.title = element_text(size = 12),            
+    legend.text = element_text(size = 12)             
+  ) +
+  theme_classic()
+plot.first.hit.benthic
+```
+
+```{r}
+plot.first.hit.benthic +
+   
+   # Line and asterisk for Sponge (bar # 11)
+  annotate("segment", x = 11 - 0.3, xend = 11 + 0.3, y = 10, yend = 10, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 11, y = 11, label = "*", size = 6, color = "black") +
+     
+   # Line and asterisk for other-living (bar # 7)
+  annotate("segment", x = 7 - 0.3, xend = 7 + 0.3, y = 10, yend = 10, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 7, y = 11, label = "**", size = 6, color = "black") +
+      
+  # Line and asterisk for living mangrove (bar # 5)
+  annotate("segment", x = 5 - 0.3, xend = 5 + 0.3, y = 10, yend = 10, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 5, y = 11, label = "***", size = 6, color = "black") +
+     
+   # Line and asterisk for CCA (bar # 1)
+  annotate("segment", x = 1 - 0.3, xend = 1 + 0.3, y = 4, yend = 4, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 1, y = 5, label = "***", size = 6, color = "black") +
+ 
+  # Line and asterisk for Macroalgae (bar # 6)
+  annotate("segment", x = 6 - 0.3, xend = 6 + 0.3, y = 60, yend = 60, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 6, y = 61, label = "***", size = 6, color = "black") +
+  
+  # Line and asterisk for sand, etc. (bar # 9)
+  annotate("segment", x = 9 - 0.3, xend = 9 + 0.3, y = 36, yend = 36, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 9, y = 37, label = "***", size = 6, color = "black") +
+  
+    # Line and asterisk for sand, etc. (bar # 3)
+  annotate("segment", x = 3 - 0.3, xend = 3 + 0.3, y = 12, yend = 12, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 3, y = 13, label = "**", size = 6, color = "black")+
+  
+     # Line and asterisk for Hard Bottom (bar # 4)
+  annotate("segment", x = 4 - 0.3, xend = 4 + 0.3, y = 5, yend = 5, 
+           color = "black", linewidth = 1) +
+  annotate("text", x = 4, y = 6, label = "***", size = 6, color = "black") 
+```
+##### download simper table
+```{r}
+
+# Extract the summary table for the Fringe_Debris contrast
+simper_summary <- summary(simper_benthic1_result)$Fringe_Debris
+
+# Convert to a dataframe and clean up
+simper_table <- data.frame(
+  "Cover Type" = rownames(simper_summary),
+  "Average Contribution" = round(simper_summary$average, 4),
+  "SD" = round(simper_summary$sd, 4),
+  "Ratio" = round(simper_summary$ratio, 4),
+  "Fringe Mean" = round(simper_summary$ava, 2),
+  "Debris Mean" = round(simper_summary$avb, 2),
+  "Cumulative" = round(simper_summary$cumsum, 3),
+  "p-value" = ifelse(simper_summary$p < 0.001, "<0.001", 
+                    format(round(simper_summary$p, 3), nsmall = 3)),
+  "Significance" = symnum(simper_summary$p, corr = FALSE, na = FALSE,
+                         cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
+                         symbols = c("***", "**", "*", ".", " "))
+)
+```
+
+```{r}
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with your desired folder path
+file_name <- "benthic1_simper_results.csv"                  # Replace with your desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(simper_table, path = full_path)
+```
+## First Hit HABxBAY
+
+```{r}
+# Combine Habitat and Bay into a single interaction term
+predictors_benthic1$Habitat_Bay <- interaction(
+  predictors_benthic1$Habitat, 
+  predictors_benthic1$Bay,
+  sep = "_"  
+)
+```
+
+```{r}
+# Run SIMPER for the interaction groups
+simper_interaction <- simper(
+  response_matrix_benthic1, 
+  group = predictors_benthic1$Habitat_Bay,
+  permutations = 999
+)
+
+
+summary(simper_interaction, pairwise = TRUE)
+```
+
+```{r}
+habxbay_simper_summary <- summary(simper_interaction, pairwise = TRUE)
+
+write_xlsx(habxbay_simper_summary, "habxbay_simper_summary.xlsx")
+```
+
+
+##Last Hit
+```{r}
+
+#Calc percentages
+benthic_cover_last <- benthic %>%
+  group_by(Bay, Habitat, quadrat_code, Monitoring_Year, Last_Hitadj) %>%  
+  summarise(Count = n()) %>%             
+  mutate(Percent_Cover = (Count / 45) * 100) %>%  
+  arrange(quadrat_code, desc(Percent_Cover))  
+
+
+View(benthic_cover_last)
+```
+
+
+```{r}
+benthic_cover_last_wide <- benthic_cover_last %>%
+  select(-Count) %>%
+  pivot_wider(names_from = Last_Hitadj, 
+              values_from = Percent_Cover,
+              values_fill = 0)  
+
+
+View(benthic_cover_last_wide)
+```
+
+
+```{r}
+benthic_cover_last$Monitoring_Year <- as.factor(benthic_cover_last$Monitoring_Year)
+```
+
+### plot for visit year
+```{r}
+#plot for VISIT YEAR
+plot_benthic_cover_last <- ggplot(benthic_cover_last, 
+       aes(x = Last_Hitadj, y = Percent_Cover, fill = Monitoring_Year)) +
+  geom_bar(stat = "identity", 
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +  
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  
+    axis.ticks.length.x = unit(0.3, "cm") 
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 10), 
+    expand = expansion(mult = c(0, 0.05))  
+  ) +
+  scale_x_discrete(
+    expand = expansion(add = 1),  
+    labels = function(Last_Hitadj) str_wrap(Last_Hitadj, width = 10)
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(y = "Mean Percent Cover (± SEM)") +
+  guides(fill = guide_legend(title = "Visit Number"))
+plot_benthic_cover_last
+```
+
+### plot for Habitat
+```{r}
+#plot for Habitat
+plot_benthic_cover_last <- ggplot(benthic_cover_last, 
+       aes(x = Last_Hitadj, y = Percent_Cover, fill = Habitat)) +
+  geom_bar(stat = "identity", 
+           width = 0.7,
+           position = position_dodge(width = 0.8)) + 
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), 
+    axis.ticks.length.x = unit(0.3, "cm")  
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 10), 
+    expand = expansion(mult = c(0, 0.05))  
+  ) +
+  scale_x_discrete(
+    expand = expansion(add = 1),  
+    labels = function(Last_Hitadj) str_wrap(Last_Hitadj, width = 10)
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(y = "Mean Percent Cover (± SEM)") +
+  guides(fill = guide_legend(title = "Habitat Type"))
+plot_benthic_cover_last
+```
+
+### plot for Bay
+```{r}
+#plot for Bay
+plot_benthic_cover_last <- ggplot(benthic_cover_last, 
+       aes(x = Last_Hitadj, y = Percent_Cover, fill = Bay)) +
+  geom_bar(stat = "identity", 
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +  
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),  
+    axis.ticks.length.x = unit(0.3, "cm")  
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 10), 
+    expand = expansion(mult = c(0, 0.05))  
+  ) +
+  scale_x_discrete(
+    expand = expansion(add = 1),  
+    labels = function(Last_Hitadj) str_wrap(Last_Hitadj, width = 10)
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(y = "Mean Percent Cover (± SEM)") +
+  guides(fill = guide_legend(title = "Bay"))
+plot_benthic_cover_last
+```
+
+### run a permanova
+```{r}
+#change column header names
+colnames(benthic_cover_last_wide)[6] <- "sand_etc"
+colnames(benthic_cover_last_wide)[5] <- "hard_bottom"
+View(benthic_cover_last_wide)
+```
+
+```{r}
+# Extract the response matrix (percent cover of organism types)
+response_matrix_benthic2 <- benthic_cover_last_wide[, c("sand_etc", "Rubble","hard_bottom")]
+
+# Extract the predictors (Habitat and Site)
+predictors_benthic2 <- benthic_cover_last_wide[, c("Habitat", "Bay", "Monitoring_Year")]
+```
+
+```{r}
+# Run PERMANOVA
+permanova_result_benthic2 <- adonis2(response_matrix_benthic2 ~ Habitat * Bay + Monitoring_Year, data = predictors_benthic2, permutations = 999, method = "bray")
+
+
+print(permanova_result_benthic2)
+
+#                Df SumOfSqs      R2      F Pr(>F)
+#Habitat          1   0.0499 0.01578 0.3631  0.714
+#Bay              1   0.1650 0.05217 1.2001  0.323
+#Monitoring_Year  1   0.1406 0.04447 1.0229  0.393
+#Habitat:Bay      1   0.1949 0.06163 1.4177  0.235
+#Residual        19   2.6120 0.82595              
+#Total           23   3.1624 1.00000  
+```
+
+```{r}
+write_xlsx(permanova_result_benthic2, "permanova_result_benthic2.xlsx")
+```
+
+###Visualize using NMDS
+```{r}
+# Perform NMDS
+nmds_benthic2_result <- metaMDS(response_matrix_benthic2, distance = "bray")
+
+# Plot 
+plot(nmds_benthic2_result, type = "n")
+points(nmds_benthic2_result, col = as.numeric(as.factor(predictors_benthic2$Bay)), pch = 16)
+ordihull(nmds_benthic2_result, groups = predictors_benthic2$Bay, draw = "polygon", col = "blue", alpha = 0.2)
+legend("topright", legend = levels(as.factor(predictors_benthic2$Bay)), col = 1:2, pch = 16)
+```
+
+
+####Creating a reference table (for appendix section of thesis) of benthic counts.
+
+```{r}
+benthic$Monitoring_Year <- as.factor(benthic$Monitoring_Year)
+benthic$quadrat_code <- as.factor(benthic$quadrat_code)
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(readr)
+
+#long format
+benthic_long <- benthic %>%
+  pivot_longer(
+    cols = starts_with("Hit_"),
+    names_to = "Hit_Number",
+    values_to = "Abbreviation"
+  )
+
+# Count occurrences by quadrat, year, and species
+benthic_counts <- benthic_long %>%
+  group_by(quadrat_code, Abbreviation, Monitoring_Year) %>%
+  summarise(Count = n(), .groups = "drop")
+
+# Join with ref table
+benthic_joined <- benthic_counts %>%
+  left_join(benthic_ref, by = "Abbreviation")
+
+```
+
+```{r}
+benthic_joined <- benthic_joined %>% drop_na()
+
+```
+
+```{r}
+benthic_appendix_sum <- benthic_joined %>%
+  select(Monitoring_Year, Definition, Category2, quadrat_code, Count)
+
+print(benthic_appendix_sum)
+```
+
+```{r}
+benthic_appendix_sum <- benthic_joined %>%
+  pivot_wider(
+    names_from = quadrat_code,
+    values_from = Count,
+    values_fill = list(Count = 0)  
+  )
+print(benthic_appendix_sum)
+```
+
+```{r}
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with your desired folder path
+file_name <- "benthic_appendix_table.csv"                  # Replace with your desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(benthic_appendix_sum, path = full_path)
+```
+
+#*Plate Cover (two-way ANOVA) and Recruit Abundance Relationships (Spearman's rank correlation)
+
+## look at data using a bar graph to see if any categories stick out
+```{r}
+# Use tile_cover.csv to look at Plate cover. 
+tile_cover <- tile_cover %>%
+  mutate(
+    Sponges_Overall = (Sponges_Top + Sponges_Bottom) / 2,
+    cca_Overall = (cca_Top + cca_Bottom) / 2,
+    Enc_Overall = (Enc_Top + Enc_Bottom) / 2,
+    Maca_Overall = (Maca_Top + Maca_Bottom) / 2,
+    mollusc_Overall = (mollusc_Top + mollusc_Bottom) / 2,
+    Turf_Overall = (Turf_Top + Turf_Bottom) / 2
+  )
+```
+
+
+```{r}
+#add Bay and Habitat from recruit_tile_full table to the tile_cover table
+names(tile_cover)[names(tile_cover) == "Plate"] <- "Tile"
+tile_cover_full <- left_join(tile_cover, recruit_tile_full, by = "Tile")
+```
+
+```{r}
+#Now there are two recruit columns, Recruits.x and Recruits.y. Remove one and make the other column just say "Recruits"
+tile_cover_full$Recruits.x <- NULL
+names(tile_cover_full)[names(tile_cover_full) == "Recruits.y"] <- "Recruits"
+```
+
+```{r}
+tile_cover_full$Habitat <- as.factor(tile_cover_full$Habitat)
+tile_cover_full$Bay <- as.factor(tile_cover_full$Bay)
+```
+
+##For OVERALL
+```{r}
+# Summarize the data to calculate mean percent cover for each organism type
+summary_tile_cover <- tile_cover_full %>%
+  summarize(
+    Sponges = mean(Sponges_Overall),
+    CCA = mean(cca_Overall),
+    Enc = mean(Enc_Overall),
+    Maca = mean(Maca_Overall),
+    Mollusc = mean(mollusc_Overall),
+    Turf = mean(Turf_Overall)
+  )
+
+# Convert to a long format
+summary_tile_cover <- summary_tile_cover %>%
+  pivot_longer(cols = everything(), names_to = "Type", values_to = "Overall_Percent_Cover")
+```
+
+
+```{r}
+plot_tile_cover <- ggplot(summary_tile_cover, aes(x = Type, y = Overall_Percent_Cover)) +
+  geom_bar(stat = "identity", width = 0.7,position = position_dodge()) +  
+  coord_cartesian(ylim = c(0,30))+
+  theme_classic()
+plot_tile_cover
+```
+
+### run a permanova for site vs. habitat
+```{r}
+library(vegan)
+```
+
+
+```{r}
+# Extract the response matrix (percent cover of organism types)
+response_matrix <- tile_cover_full[, c("Sponges_Overall", "cca_Overall", "Enc_Overall", "Maca_Overall", "mollusc_Overall", "Turf_Overall")]
+
+# Extract predictors (Habitat and Site)
+predictors <- tile_cover_full[, c("Habitat", "Bay")]
+```
+
+```{r}
+# Run PERMANOVA
+permanova_result <- adonis2(response_matrix ~ Habitat * Bay, data = predictors, permutations = 999, method = "bray")
+
+# View the results
+print(permanova_result)
+#Bay has a significant effect on the plate community composition (p = 0.003). The Habitat (p = 0.108) and interaction of Bay/Hab (p = 0.056) do not.
+```
+
+```{r}
+write_xlsx(permanova_result, "permanova_result_plate_overall.xlsx")
+```
+
+###Visualize
+```{r}
+# Perform NMDS
+nmds_result <- metaMDS(response_matrix, distance = "bray")
+
+# Plot 
+plot(nmds_result, type = "n")
+points(nmds_result, col = as.numeric(as.factor(predictors$Bay)), pch = 16)
+ordihull(nmds_result, groups = predictors$Bay, draw = "polygon", col = "blue", alpha = 0.2)
+legend("topright", legend = levels(as.factor(predictors$Bay)), col = 1:2, pch = 16)
+```
+
+###follow-up with a SIMPER
+```{r}
+simper_result <- simper(response_matrix, predictors$Bay)
+summary(simper_result)
+#So this teases out that Turf (p = 0.001) and Macro Algae (p = 0.008) are significant contrasts in Otter vs. Water
+```
+
+```{r}
+simper_summary <- summary(simper_result)$Otter_Water
+simper_summary <- rownames_to_column(simper_summary, var = "Sp")
+```
+
+```{r}
+
+# Convert SIMPER summary to a dataframe
+simper_df <- data.frame(
+  Cover_Type = simper_summary$Sp,
+  Contribution = simper_summary$average * 100,  # Convert to percentage
+  p_value = simper_summary$p,
+  Otter_av = simper_summary$ava,
+  Water_av = simper_summary$avb,
+  average = simper_summary$average,
+  ratio = simper_summary$ratio,
+  sd = simper_summary$sd,
+  cumsum = simper_summary$cumsum
+  
+) 
+
+# Add significance labels
+simper_df <- simper_df %>%
+  mutate(
+    Significance = case_when(
+      p_value < 0.001 ~ "***",
+      p_value < 0.01 ~ "**",
+      p_value < 0.05 ~ "*",
+      TRUE ~ ""
+    )
+  )
+
+# Bar chart
+ggplot(simper_df, aes(x = reorder(Cover_Type, Contribution), y = Contribution, fill = Contribution)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Significance, y = Contribution + 1), 
+            size = 6, vjust = 0) + 
+  labs(
+    x = "Species",
+    y = "Contribution to Dissimilarity (%)",
+    title = "Top Contributors to Group Differences (SIMPER)"
+  ) +
+  coord_flip() +  # Horizontal bars
+  theme_minimal() +
+  scale_fill_gradient(low = "skyblue", high = "navy")  
+```
+
+```{r}
+simper_df <- simper_df %>% 
+  mutate(
+    Cover_Type = case_when(
+      Cover_Type == "Turf_Overall" ~ "Turf Algae",
+      Cover_Type == "Sponges_Overall" ~ "Sponges",
+      Cover_Type == "mollusc_Overall" ~ "Mollusks",
+      Cover_Type == "Maca_Overall" ~ "Macroalgae",
+      Cover_Type == "Enc_Overall" ~ "Encrusting Organisms",
+      Cover_Type == "cca_Overall" ~ "CCA"
+
+    )
+  )
+```
+
+####alternative simper chart
+```{r}
+# Add which bay dominates for each species (from SIMPER's ava/avb)
+simper_df <- simper_df %>%
+  mutate(
+    Dominant_Bay = ifelse(Otter_av > Water_av, "Otter", "Water")  
+  )
+
+ggplot(simper_df, aes(x = reorder(Cover_Type, Contribution), y = Contribution, 
+                     fill = Dominant_Bay)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Significance, y = Contribution + 1), 
+            size = 5, vjust = 0) +
+  scale_fill_manual(
+    values = c("Otter" = "peru", "Water" = "skyblue4"),  
+    name = "Higher abundance in"
+  ) +
+  labs(x = "Species", y = "Contribution to Dissimilarity (%)",
+       title = "Top Contributors: Dominant Bay Shown") +
+  coord_flip() +
+  theme_minimal()
+```
+
+
+##For BOTTOM
+```{r}
+# Summarize the data to calculate mean percent cover for each organism type
+summary_bottom_tile_cover <- tile_cover_full %>%
+  summarize(
+    Sponges = mean(Sponges_Bottom),
+    CCA = mean(cca_Bottom),
+    Enc = mean(Enc_Bottom),
+    Maca = mean(Maca_Bottom),
+    Mollusc = mean(mollusc_Bottom),
+    Turf = mean(Turf_Bottom)
+  )
+
+# Convert the summarized data to a long format for ggplot2
+summary_bottom_tile_cover <- summary_bottom_tile_cover %>%
+  pivot_longer(cols = everything(), names_to = "Type", values_to = "Bottom_Percent_Cover")
+```
+
+
+```{r}
+plot_bottom_tile_cover <- ggplot(summary_bottom_tile_cover, aes(x = Type, y = Bottom_Percent_Cover)) +
+  geom_bar(stat = "identity", width = 0.7,position = position_dodge()) +  # Bar plot
+  coord_cartesian(ylim = c(0,30))+
+  theme_classic()
+plot_bottom_tile_cover
+```
+
+### run a permanova for site vs. habitat
+
+```{r}
+# Extract the response matrix (percent cover of organism types)
+response_bot_matrix <- tile_cover_full[, c("Sponges_Bottom", "cca_Bottom", "Enc_Bottom", "mollusc_Bottom", "Maca_Bottom","Turf_Bottom")]
+
+# Extract the predictors (Habitat and Site)
+predictors <- tile_cover_full[, c("Habitat", "Bay")]
+```
+
+```{r}
+# Run PERMANOVA
+permanova_bot_result <- adonis2(response_bot_matrix ~ Habitat * Bay, data = predictors, permutations = 999, method = "bray")
+
+# View the results
+print(permanova_bot_result)
+#There is no significant effect of Bay or Habitat on cover type. There is almost an interaction of Bay/Hab (p = 0.057). 
+```
+
+###Visualize
+```{r}
+# Perform NMDS
+nmds_bot_result <- metaMDS(response_bot_matrix, distance = "bray")
+
+# Plot 
+plot(nmds_bot_result, type = "n")
+points(nmds_bot_result, col = as.numeric(as.factor(predictors$Bay)), pch = 16)
+ordihull(nmds_bot_result, groups = predictors$Bay, draw = "polygon", col = "blue", alpha = 0.2)
+legend("topright", legend = levels(as.factor(predictors$Bay)), col = 1:2, pch = 16)
+```
+
+###follow-up with a SIMPER
+```{r}
+simper_bot_result <- simper(response_bot_matrix, predictors$Bay)
+summary(simper_bot_result)
+#There is no signifcance of plate comp for habitat 
+```
+
+
+## Correlation analysis (Spearman rank) for number of recruits and all hab types useing raw recruit numbers
+
+```{r}
+# Spearman correlation between Coral_Recruits and Sponge
+cor_test_sponge <- cor.test(tile_cover_full$Recruits, tile_cover_full$Sponges_Overall, method = "spearman")
+print(cor_test_sponge)
+```
+
+
+```{r}
+#A FOR LOOP!! For all cover types:
+# List of cover types
+cover_types <- c("Sponges_Overall", "cca_Overall", "Enc_Overall", "Maca_Overall", "mollusc_Overall", "Turf_Overall")
+
+# Run Spearman correlation tests for each cover type
+results <- lapply(cover_types, function(cover) {
+  test <- cor.test(tile_cover_full$Recruits, tile_cover_full[[cover]], method = "spearman")
+  data.frame(
+    Cover_Type = cover,
+    Rho = test$estimate,
+    P_Value = test$p.value
+  )
+})
+
+# Combine results into a data frame
+results_df <- do.call(rbind, results)
+
+
+print(results_df)
+
+#          Cover_Type         Rho     P_Value
+#rho  Sponges_Overall -0.19690556 0.179785026
+#rho1     cca_Overall  0.30448680 0.035361979 *
+#rho2     Enc_Overall -0.09195761 0.534187469
+#rho3    Maca_Overall  0.01410407 0.924199850
+#rho4 mollusc_Overall  0.21477670 0.142658577
+#rho5    Turf_Overall -0.39949839 0.004907816* 
+```
+
+```{r}
+#Graphs for each:
+for (cover in cover_types) {
+  plot <- ggplot(tile_cover_full, aes(x = tile_cover_full[[cover]], y = tile_cover_full$Recruits)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE, color = "red") +
+    labs(
+      title = paste("Coral Recruits vs", cover),
+      x = cover,
+      y = "Coral Recruits"
+    ) +
+    theme_minimal()
+  print(plot)
+}
+```
+
+## BOTTOM Correlation analysis for number of recruits and all hab types
+
+```{r}
+#A FOR LOOP!! For all cover types:
+# List of cover types
+bot_cover_types <- c("Sponges_Bottom", "cca_Bottom", "Enc_Bottom", "Maca_Bottom", "mollusc_Bottom", "Turf_Bottom")
+
+# Run Spearman correlation tests for each cover type
+bot_results <- lapply(bot_cover_types, function(cover) {
+  test <- cor.test(tile_cover_full$Recruits, tile_cover_full[[cover]], method = "spearman")
+  data.frame(
+    Cover_Type = cover,
+    Rho = test$estimate,
+    P_Value = test$p.value
+  )
+})
+
+# Combine results into a data frame
+results_bot_df <- do.call(rbind, bot_results)
+
+
+print(results_bot_df)
+
+#         Cover_Type        Rho    P_Value
+#rho  Sponges_Bottom -0.1983750 0.17649347
+#rho1     cca_Bottom  0.2727935 0.06066874
+#rho2     Enc_Bottom -0.2268708 0.12098039
+#rho3    Maca_Bottom         NA         NA
+#rho4 mollusc_Bottom  0.3265416 0.02350033 *
+#rho5    Turf_Bottom -0.2917681 0.04420296 *
+```
+
+```{r}
+#Overview Graphs for each:
+for (cover in bot_cover_types) {
+  plot_spearman_bottom <- ggplot(tile_cover_full, aes(x = tile_cover_full[[cover]], y = tile_cover_full$Recruits)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE, color = "red") +
+    labs(
+      title = paste("Coral Recruits vs", cover),
+      x = cover,
+      y = "Coral Recruits"
+    ) +
+    theme_minimal()
+  print(plot_spearman_bottom)
+}
+```
+
+
+##Look at all three options for cover
+```{r}
+# Pivot specific columns to longer format
+tile_cover_long <- tile_cover_full %>%
+   pivot_longer(
+    cols = starts_with("Sponges") | starts_with("cca") | starts_with("mollusc") | starts_with("Maca") | starts_with("Enc") | starts_with("Turf"),  
+    names_to = "Category_Tile",  
+    values_to = "Percent_Change"  
+  )
+
+
+print(tile_cover_long)
+```
+
+
+```{r}
+# Separate Category_Tile into Type and Tile_Location
+tile_cover_long <- tile_cover_long %>%
+  separate(
+    col = Category_Tile,  
+    into = c("Cover_Type", "Tile_Location"), 
+    sep = "_"  
+  )
+
+
+print(tile_cover_long)
+```
+
+```{r}
+all.cover.summary <- tile_cover_long %>%
+  group_by(Cover_Type, Tile_Location) %>% 
+  summarise(
+    mean = mean(Percent_Change),  
+    sd = sd(Percent_Change),     
+    sample_size = n(), 
+    se = sd / sqrt(n())  
+  )
+
+View(all.cover.summary)
+```
+
+
+```{r}
+plot_tile_cover_combined <- ggplot(all.cover.summary, aes(x = Cover_Type, y = mean, fill = Tile_Location)) +
+  geom_bar(stat = "identity", width = 0.7,position = position_dodge()) + 
+  coord_cartesian(ylim = c(0,50))+
+  theme_classic()
+plot_tile_cover_combined
+```
+
+```{r}
+all.cover.summary <- all.cover.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5)  
+  )
+print(all.cover.summary)
+```
+
+```{r}
+all.cover.summary$Tile_Location <- factor(all.cover.summary$Tile_Location, levels = c("Top", "Bottom", "Overall"))
+```
+
+
+```{r}
+plot.tile.cover <- ggplot(all.cover.summary, aes(x = Cover_Type, y = mean, fill= Tile_Location)) +
+  geom_bar(stat = "identity", width = 0.7,position = position_dodge()) +  
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),  
+    width = 0.1,  
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  scale_x_discrete(labels = c("cca" = "CCA", "Enc" = "Encrusting\nOrganisms", "Maca"= "Macroalgae", "mollusc"= "Mollusks")) +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0,45))+
+  scale_fill_manual(values=c("thistle4", "lightpink3", "grey27"),
+                    name="Tile Surface") +
+  labs(
+    x = "",
+    y = "Mean Percent Cover (± SEM)"
+  ) +
+  theme(
+    text = element_text(size = 12, family = "sans"),  
+    plot.title = element_text(size = 12),              
+    axis.title = element_text(size = 12),              
+    axis.text = element_text(size = 12),               
+    legend.title = element_text(size = 12),            
+    legend.text = element_text(size = 12)             
+  ) +
+  theme_classic()
+plot.tile.cover
+```
+##facet wrap
+```{r}
+tile_cover_long_overall <- tile_cover_long %>% 
+  filter(Tile_Location == "Overall") %>% 
+  mutate(
+    Cover_Type = case_when(
+      Cover_Type == "cca" ~ "CCA",
+      Cover_Type == "Enc" ~ "Encrusting Organisms",
+      Cover_Type == "mollusc" ~ "Mollusks",
+      Cover_Type == "Turf" ~ "Turf Algae",
+      Cover_Type == "Sponges" ~ "Sponges",
+      Cover_Type == "Maca" ~ "Macroalgae"
+    )
+  )
+```
+
+```{r}
+p_values_overall <- results_df %>%
+  group_by(Cover_Type) %>%
+  mutate(
+    Cover_Type = case_when(
+      Cover_Type == "cca_Overall" ~ "CCA",
+      Cover_Type == "Enc_Overall" ~ "Encrusting Organisms",
+      Cover_Type == "mollusc_Overall" ~ "Mollusks",
+      Cover_Type == "Turf_Overall" ~ "Turf Algae",
+      Cover_Type == "Sponges_Overall" ~ "Sponges",
+      Cover_Type == "Maca_Overall" ~ "Macroalgae",
+    ),
+    significance = case_when(
+      P_Value < 0.001 ~ "***",
+      P_Value < 0.01 ~ "**",
+      P_Value < 0.05 ~ "*",
+      TRUE ~ ""  
+    ))
+```
+
+
+```{r}
+
+#Define x-axis range 
+x_limits <- c(0, 60)  
+
+# 2. Calculate pretty breaks 
+custom_breaks <- pretty(x_limits, n = 6)  
+# Ensure the max value included
+if (!max(x_limits) %in% custom_breaks) {
+  custom_breaks <- c(custom_breaks, max(x_limits))
+}
+
+ggplot(tile_cover_long_overall, aes(x = Percent_Change, y = Recruits)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "orange") +
+  facet_wrap(~ Cover_Type, scales = "free_x") +  
+  labs(
+    x = "Percent Cover",
+    y = "Number of Coral Recruits",
+    title = "Coral Recruits Across Overall Plate Composition"
+  ) +
+  scale_x_continuous(
+    limits = x_limits,           
+    breaks = custom_breaks,      
+    expand = expansion(mult = c(0.05, 0))  
+  ) +
+  theme_bw() +
+   theme(panel.grid = element_blank())+
+ geom_text(
+    data = p_values_overall,
+    aes(
+      x = Inf, y = Inf,  
+      label = significance
+    ),
+    hjust = 1.1, vjust = 1.5,
+  size = 12, color = "red"
+  )
+```
+
+###Bottom facet wrap
+```{r}
+tile_cover_long_bot <- tile_cover_long %>% 
+  filter(Tile_Location == "Bottom",
+         Cover_Type != "Maca") %>% 
+  mutate(
+    Cover_Type = case_when(
+      Cover_Type == "cca" ~ "CCA",
+      Cover_Type == "Enc" ~ "Encrusting Organisms",
+      Cover_Type == "mollusc" ~ "Mollusks",
+      Cover_Type == "Turf" ~ "Turf Algae",
+      Cover_Type == "Sponges" ~ "Sponges",
+    )
+  )
+```
+
+```{r}
+p_values_bottom <- results_bot_df %>%
+  group_by(Cover_Type) %>%
+  filter(Cover_Type != "Maca_Bottom") %>%
+  mutate(
+    Cover_Type = case_when(
+      Cover_Type == "cca_Bottom" ~ "CCA",
+      Cover_Type == "Enc_Bottom" ~ "Encrusting Organisms",
+      Cover_Type == "mollusc_Bottom" ~ "Mollusks",
+      Cover_Type == "Turf_Bottom" ~ "Turf Algae",
+      Cover_Type == "Sponges_Bottom" ~ "Sponges",
+    ),
+    significance = case_when(
+      P_Value < 0.001 ~ "***",
+      P_Value < 0.01 ~ "**",
+      P_Value < 0.05 ~ "*",
+      TRUE ~ ""  
+    ))
+```
+
+
+```{r}
+
+
+x_limits <- c(0, 80)  
+
+
+custom_breaks <- pretty(x_limits, n = 6) 
+
+if (!max(x_limits) %in% custom_breaks) {
+  custom_breaks <- c(custom_breaks, max(x_limits))
+}
+
+ggplot(tile_cover_long_bot, aes(x = Percent_Change, y = Recruits)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "orange") +
+  facet_wrap(~ Cover_Type, scales = "free_x") +  
+  labs(
+    x = "Percent Cover",
+    y = "Number of Coral Recruits",
+    title = "Coral Recruits Across Bottom Plate Composition"
+  ) +
+  scale_x_continuous(
+    limits = x_limits,          
+    breaks = custom_breaks,      
+    expand = expansion(mult = c(0.05, 0))  
+  ) +
+  theme_bw() +
+   theme(panel.grid = element_blank())+
+ geom_text(
+    data = p_values_bottom,
+    aes(
+      x = Inf, y = Inf,  
+      label = significance
+    ),
+    hjust = 1.1, vjust = 1.5,
+  size = 12, color = "red"
+  )
+```
+
+
+#*Exploratory Analyses
+##Predation Prevalence
+
+```{r}
+pred_table <- mang_data %>% 
+  mutate(binom.pred = ifelse(Condition == "P", 1, 0))
+
+print(pred_table)
+```
+
+```{r}
+pred_table <- pred_table %>% 
+  filter(binom.surv == 0)
+```
+
+```{r}
+pred_table <- subset(pred_table, Tag != 595)
+pred_table <- subset(pred_table, MonitoringChunk != "Feb24")
+```
+
+
+```{r}
+pred_table$NumberMonths <- as.factor(pred_table$NumberMonths)
+pred_table$Bay <- as.factor(pred_table$Bay)
+pred_table$Habitat <- as.factor(pred_table$Habitat)
+```
+
+
+```{r}
+# Get Seedling counts
+pred_table_months <- pred_table %>%
+  group_by(Bay, Habitat, quadrat_code, NumberMonths) %>%
+  summarise(seedling_count = n_distinct(Tag, na.rm = TRUE),
+            predation_count = n_distinct(binom.pred, na.rm = TRUE),.groups = "drop") 
+```
+
+```{r}
+sum(pred_table_months$seedling_count)
+```
+
+
+```{r}
+# get values for quadrats that did not have any mangroves in them:
+all_months <- unique(living.mangs$NumberMonths)
+ 
+ all_quadrats_time <- expand_grid(
+   all_quadrats_ref,
+  NumberMonths = all_months
+ )
+ # then join quadrats that did not have any mangroves in them:
+ mangcountmonths <- all_quadrats_time %>%
+   left_join(mangcountmonths, by = c("Bay", "Habitat", "quadrat_code", "NumberMonths")) %>%
+   mutate(seedling_count = replace_na(seedling_count, 0))
+```
+
+
+```{r}
+# get values for quadrats that did not have any mangroves in them:
+all_months <- unique(pred_table$NumberMonths)
+ 
+ all_quadrats_time <- expand_grid(
+   all_quadrats_ref,
+  NumberMonths = all_months
+ )
+ # then join quadrats that did not have any mangroves in them:
+ pred_table_months <- all_quadrats_time %>%
+   left_join(pred_table_months, by = c("Bay", "Habitat", "quadrat_code", "NumberMonths")) %>%
+   mutate(seedling_count = replace_na(seedling_count, 0),
+          predation_count = replace_na(predation_count, 0))
+```
+
+```{r}
+pred_table_months <- pred_table_months %>%
+  group_by(Bay, Habitat, quadrat_code, NumberMonths) %>%
+  mutate(
+    predation_prevalence = ifelse(predation_count == 0 | is.na(predation_count), 0, (predation_count / seedling_count)*100
+  )) %>%
+  ungroup()
+```
+
+```{r}
+pred_table_months$Bay <- as.factor(pred_table_months$Bay)
+pred_table_months$NumberMonths <- as.factor(pred_table_months$NumberMonths)
+pred_table_months$quadrat_code <- as.factor(pred_table_months$quadrat_code)
+pred_table_months$Habitat <- as.factor(pred_table_months$Habitat)
+```
+
+```{r}
+shapiro.test(pred_table_months$predation_prevalence)
+#Not NORMAL
+```
+
+```{r}
+kruskal.test(predation_prevalence ~ NumberMonths, data = pred_table_months)
+
+```
+
+```{r}
+wilcox.test(predation_prevalence ~ Bay, data = pred_table_months)
+```
+
+```{r}
+wilcox.test(predation_prevalence ~ Habitat, data = pred_table_months)
+```
+
+```{r}
+pred.model <- lm(predation_prevalence ~ Bay + Habitat + NumberMonths, data = pred_table_months)
+
+summary(pred.model)
+```
+
+###graph
+```{r}
+#plot for coral recruits
+predation.summary <- pred_table_months %>%
+  group_by(Bay) %>% 
+  summarise(
+    mean = mean(predation_prevalence),  
+    sd = sd(predation_prevalence),
+    total_pred = sum(predation_count),
+    se = sd / sqrt(n())  
+  )
+
+print(predation.summary)
+```
+
+
+```{r}
+predation.summary <- predation.summary %>%
+  mutate(
+    Label_Y = ifelse(mean > 0, mean + se, mean - se),  
+    Label_Vjust = ifelse(mean > 0, -0.5, 1.5),
+    label = c("a", "b") 
+  )
+print(predation.summary)
+```
+
+
+```{r}
+plot.pred <- ggplot(predation.summary, aes(x = Bay, y = mean)) +
+  geom_bar(stat = "identity", fill = "maroon4", width = 0.7,position = position_dodge()) + 
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),  
+    width = 0.1,  
+    color = "black",
+    position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(y = Label_Y, label = predation.summary$label),
+    position = position_dodge(.7),  
+    vjust = predation.summary$Label_Vjust,  
+    size = 5,  
+    color = "black"
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = pretty_breaks(n = 5)) +
+  coord_cartesian(ylim = c(0,70))+
+  labs(
+    x = "Bay (Creek)",
+    y = "Mean Predation Prevalence (% ± SEM)"
+  ) +
+    theme_minimal(base_size = 14)+
+  theme(
+    axis.title.y = element_markdown(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.x = element_blank()) 
+plot.pred
+
+```
+
+```{r}
+#plot for coral recruits
+predation.summary.quad <- pred_table_months %>%
+  group_by(quadrat_code) %>% 
+  summarise(
+    mean = mean(predation_prevalence),  
+    sd = sd(predation_prevalence),
+    total_pred = sum(predation_count),
+    total_seedlings = sum(seedling_count),
+    se = sd / sqrt(n())  
+  )
+
+print(predation.summary.quad)
+```
+
+### 09.11.25
+
+```{r}
+predation$Habitat <- as.factor(predation$Habitat)
+predation$Quadrat <- as.factor(predation$Quadrat)
+predation$Bay <- as.factor(predation$Bay)
+predation$Tag <- as.character(predation$Tag)
+```
+
+```{r}
+mean(predation$pred_occurrence) * 100 
+# [1] 47.05882 % tags with predation
+
+```
+
+```{r}
+quad_prev <- predation %>%
+  group_by(Bay, Habitat, Quadrat) %>%
+  summarise(
+    pred_prevalence = (sum(pred_occurrence)/n())*100,
+    pred_prop = sum(pred_occurrence)/n(),
+    total_pred = sum(pred_occurrence),               
+    total_seedlings = n(),
+    .groups = "drop"
+  )
+print(quad_prev)
+
+```
+
+```{r}
+bay_prev <- quad_prev %>%
+  group_by(Bay) %>%
+  summarise(
+    mean = mean(pred_prevalence),
+    sd = sd(pred_prevalence),
+    se = sd / sqrt(n())
+  )
+print(bay_prev)
+```
+
+```{r}
+hab_prev <- quad_prev %>%
+  group_by(Habitat) %>%
+  summarise(
+    mean = mean(pred_prevalence),
+    sd = sd(pred_prevalence),
+    se = sd / sqrt(n())
+  )
+print(hab_prev)
+```
+
+```{r}
+shapiro.test(quad_prev$pred_prevalence)
+#NORMAL
+```
+
+```{r}
+t.test(pred_prevalence ~ Bay, data = quad_prev)
+```
+
+```{r}
+t.test(pred_prevalence ~ Habitat, data = quad_prev)
+```
+
+```{r}
+pred.model <- lm(pred_prevalence ~ Bay * Habitat, data = quad_prev)
+
+summary(pred.model)
+```
+
+```{r}
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with your desired folder path
+file_name <- "mang.predation.summary.csv"                  # Replace with your desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(quad_prev, path = full_path)
+```
+
+
+##Coral Bleaching Prevalence
+
+```{r}
+bleaching$habitat <- as.factor(bleaching$habitat)
+bleaching$quadrat_code <- as.factor(bleaching$quadrat_code)
+bleaching$bay <- as.factor(bleaching$bay)
+bleaching$tag_id <- as.character(bleaching$tag_id)
+```
+
+
+```{r}
+bleaching_prev <- bleaching %>% 
+  select(tag_id, habitat, quadrat_code, bay, bl_binomial)
+```
+
+
+```{r}
+mean(bleaching_prev$bl_binomial) * 100 
+# [1] 43.33333 
+
+```
+
+```{r}
+quad_blprev <- bleaching_prev %>%
+  group_by(bay, habitat, quadrat_code) %>%
+  summarise(
+    prevalence = (sum(bl_binomial)/n())*100,
+    proportion = sum(bl_binomial)/n(),
+    total_bl = sum(bl_binomial),               
+    total_corals = n(),
+    .groups = "drop"
+  )
+print(quad_blprev)
+
+```
+
+```{r}
+bay_blprev <- quad_blprev %>%
+  group_by(bay) %>%
+  summarise(
+    mean = mean(proportion),
+    sd = sd(proportion),
+    se = sd / sqrt(n()),
+    n = n()
+  )
+print(bay_blprev)
+```
+
+```{r}
+hab_blprev <- quad_blprev %>%
+  group_by(habitat) %>%
+  summarise(
+    mean = mean(prevalence),
+    sd = sd(prevalence),
+    se = sd / sqrt(n())
+  )
+print(hab_blprev)
+```
+
+```{r}
+bayhab_blprev <- quad_blprev %>%
+  group_by(bay, habitat) %>%
+  summarise(
+    mean = mean(proportion),
+    sd = sd(proportion),
+    se = sd / sqrt(n()),
+    n = n()
+  )
+print(bayhab_blprev)
+```
+
+
+```{r}
+shapiro.test(quad_blprev$proportion)
+#Not NORMAL
+```
+
+```{r}
+wilcox.test(proportion ~ bay, data = quad_blprev)
+```
+
+```{r}
+wilcox.test(proportion ~ habitat, data = quad_blprev)
+```
+
+```{r}
+bl.model <- lm(proportion ~ bay + habitat, data = quad_blprev)
+
+summary(bl.model)
+```
+
+
+```{r}
+# Specify the folder path and file name
+docs_folder_path <- "~/Documents/UVI/Thesis/Statistics/Thesis_Results/ThesisResults/docs"  # Replace with your desired folder path
+file_name <- "coral.bleaching.summary.csv"                  # Replace with your desired file name
+full_path <- file.path(docs_folder_path, file_name)    # Combine folder path and file name
+
+# Save the dataframe to the specified folder
+write_xlsx(quad_blprev, path = full_path)
+```

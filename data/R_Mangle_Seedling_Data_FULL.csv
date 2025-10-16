@@ -1,0 +1,107 @@
+﻿Date,DateValues,Names,Bay,Month,MoYr,MonitoringPeriod,NumberDays,Quadrat,Habitat,Stage,Tag,TrackingPeriod,Lat,Long,Surv,Surv_Sum,Condition,Herbivory,Height,WaterDepth,HypoColor,Branches,NodesMS,LeavesMS,NodesBR,LeavesBR,Photo,NOTES
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Otter,January,23-Jan,1,0,S1,fringe,Seedling,121,Primary,18.349702,-64.691088,A,A,H,N,46.4,25,G,1,2,0,3,4,,PREV TAGGED
+4/2/23,4/2/23,LU,Otter,April,23-Apr,2,69,S1,fringe,Seedling,121,Primary,18.349702,-64.691088,A,A,P,B,41.6,3.75,BY,0,2,0,0,0,Y,
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,S1,fringe,Seedling,121,Primary,18.349702,-64.691088,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,need to remove tag
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S1,fringe,Seedling,121,Primary,18.349702,-64.691088,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+12/2/22,12/2/22,"LU, AD, KH",Otter,January,23-Jan,1,0,S1,fringe,Seedling,126,Primary,18.349735,-64.691077,A,A,H,N,27,116,G,0,1,2,0,0,Y,IN BENTHIC QUADRAT
+4/2/23,4/2/23,LU,Otter,April,23-Apr,2,69,S1,fringe,Seedling,126,Primary,18.349735,-64.691077,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"WAS NOT IN BENTHIC QUADRAT ANYMORE, MUST HAVE WASHED AWAY. NEED TO PULL TAG"
+8/23/23,8/23/23,LU,Otter,August,23-Aug,3,143,S1,fringe,Seedling,126,Primary,18.349735,-64.691077,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S1,fringe,Seedling,126,Primary,18.349735,-64.691077,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U3,debris,Seedling,162,Secondary,18.345204,-64.690679,A,A,H,N,21,0,G,0,0,0,0,0,Y,UNDER DEBRIS
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,U3,debris,Seedling,162,Secondary,18.345204,-64.690679,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,CNL = COULD NOT LOCATE
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U3,debris,Seedling,162,Secondary,18.345204,-64.690679,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,S1,fringe,Seedling,166,Tertiary,18.350272,64.689162,A,A,H,N,14.3,18,G,0,0,0,0,0,Y,NEW!
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S1,fringe,Seedling,166,Tertiary,18.350272,64.689162,DY,A,P,B,27,0,G,0,1,0,0,0,Y,BROWSE
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,S1,fringe,Seedling,167,Tertiary,18.39986,64.691064,A,A,H,N,18.3,25,G,0,0,0,0,0,Y,
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S1,fringe,Seedling,167,Tertiary,18.39986,64.691064,A,A,P,B,31.9,0.3,YG,0,2,1,0,0,Y,BROWSE
+3/21/23,3/21/23,LU,Water,January,23-Jan,1,0,S3,fringe,Sapling,170,Primary,18.345567,-64.692527,A,A,P,I,54.3,4,B,0,22,11,0,0,Y,INSECT BITES
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S3,fringe,Sapling,170,Primary,18.345567,-64.692527,A,A,P,I,54.4,0,B,0,23,8,0,0,Y,HERBIVORY (BITES)
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,S3,fringe,Sapling,170,Primary,18.345567,-64.692527,A,A,H,I,56,14,B,0,22,7,0,0,Y,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S3,fringe,Sapling,170,Primary,18.345567,-64.692527,A,A,P,I,58.2,0,B,0,26,9,0,0,Y,SOME LEAF SPOTS
+3/21/23,3/21/23,LU,Water,January,23-Jan,1,0,S2,fringe,Seedling,176,Primary,18.3481,-64.689844,A,A,H,N,42.7,1,G,0,3,6,0,0,Y,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S2,fringe,Seedling,176,Primary,18.3481,-64.689844,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,S2,fringe,Seedling,176,Primary,18.3481,-64.689844,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,removed tag
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S2,fringe,Seedling,176,Primary,18.3481,-64.689844,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+3/21/23,3/21/23,LU,Water,January,23-Jan,1,0,U3,debris,Seedling,178,Primary,18.3452,-64.69072,A,A,P,I,31.5,7,G,0,3,3,0,0,Y,INSECT BITES
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U3,debris,Seedling,178,Primary,18.3452,-64.69072,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,CNL = COULD NOT LOCATE
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,U3,debris,Seedling,178,Primary,18.3452,-64.69072,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,CNL = COULD NOT LOCATE
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U3,debris,Seedling,178,Primary,18.3452,-64.69072,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+3/21/23,3/21/23,LU,Water,January,23-Jan,1,0,S3,fringe,Sapling,185,Primary,18.345569,-64.692541,A,A,P,I,60.5,1,YG,0,19,7,0,0,Y,INSECT BITES
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S3,fringe,Sapling,185,Primary,18.345569,-64.692541,A,A,H,B,60.6,0,YB,0,21,9,0,0,Y,
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,S3,fringe,Sapling,185,Primary,18.345569,-64.692541,DY,A,P,B,58.2,12.3,YB,0,21,1,0,0,Y,HERBIVORY
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S3,fringe,Sapling,185,Primary,18.345569,-64.692541,DY,A,P,B,58.2,0,YB,0,21,0,0,0,Y,BROWSE
+3/21/23,3/21/23,LU,Water,January,23-Jan,1,0,U2,debris,Seedling,190,Primary,18.347904,-64.690302,A,A,H,N,26.2,0,G,0,3,6,0,0,Y,GROWING OUT OF ROCKY SUB
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U2,debris,Seedling,190,Primary,18.347904,-64.690302,DY,A,P,B,23.8,0,G,0,2,2,0,0,Y,DECAP (FROM HERBIVORY/BROWSE)
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,U2,debris,Seedling,190,Primary,18.347904,-64.690302,DY,A,P,B,24.6,1.6,YG,1,2,1,2,3,Y,MS dying/decap
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U2,debris,Seedling,190,Primary,18.347904,-64.690302,A,A,H,N,31.6,0,Y,1,2,0,4,7,Y,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S3,fringe,Seedling,195,Secondary,18.345543,-64.692566,A,A,P,B,28.4,1,G,0,0,0,0,0,Y,MSD
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,S3,fringe,Seedling,195,Secondary,18.345543,-64.692566,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,CNL = COULD NOT LOCATE
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S3,fringe,Seedling,195,Secondary,18.345543,-64.692566,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,S2,fringe,Seedling,236,Tertiary,18.351293,64.690905,A,A,H,N,20.3,19,YG,0,0,0,0,0,Y,
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S2,fringe,Seedling,236,Tertiary,18.351293,64.690905,DY,A,P,B,34.8,,YG,0,1,0,3,4,Y,BROWSE
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,S1,fringe,Seedling,238,Tertiary,18.399828,64.691048,A,A,H,N,20.8,28,G,0,0,0,0,0,Y,
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S1,fringe,Seedling,238,Tertiary,18.399828,64.691048,DY,A,P,B,40.4,2,G,0,2,1,0,0,Y,BROWSE
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U1,debris,Seedling,433,Secondary,18.349985,-64.689303,DY,A,P,B,42.5,0,Y,1,3,0,2,0,Y,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,U1,debris,Seedling,433,Secondary,18.349985,-64.689303,DY,A,P,B,41.8,20,YG,1,3,0,1,0,Y,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U1,debris,Seedling,433,Secondary,18.349985,-64.689303,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U3,debris,Seedling,453,Quaternary,18.345152,-64.69064,A,A,W,N,18,0,G,1,0,0,1,2,Y,"MSD, NEW STEM DECAP"
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S3,fringe,Seedling,456,Quaternary,18.345579,-64.692594,A,A,P,B,31.8,0,G,0,0,0,0,0,Y,BROWSE
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U1,debris,Seedling,465,Secondary,18.349968,-64.689284,DY,A,P,B,28.8,0,G,0,1,0,NA,NA,Y,HEAVY HERBIVORY (DEER BROWSE?)
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,U1,debris,Seedling,465,Secondary,18.349968,-64.689284,DY,A,P,B,27,23,G,1,1,0,1,0,Y,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U1,debris,Seedling,465,Secondary,18.349968,-64.689284,A,A,P,B,25.2,0,Y,1,3,0,4,4,Y,MSD FROM BROWSE
+5/24/23,5/24/23,LU,Otter,April,23-Apr,2,69,U3,debris,Seedling,466,Secondary,18.351575,-64.691086,A,A,H,N,18,28,G,0,0,0,0,0,Y,"NEW, NO NODES OR LEAVES YET"
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,U3,debris,Seedling,466,Secondary,18.351575,-64.691086,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,CNL = COULD NOT LOCATE
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,U3,debris,Seedling,466,Secondary,18.351575,-64.691086,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U2,debris,Seedling,469,Quaternary,18.347923,-64.690319,A,A,H,N,20.6,0,B,0,4,5,0,0,Y,PLANTED?
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U1,debris,Seedling,471,Secondary,18.350015,-64.689327,A,A,H,N,21.6,0,G,0,2,2,0,0,Y,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,U1,debris,Seedling,471,Secondary,18.350015,-64.689327,DY,A,P,B,20,14,YG,0,2,0,0,0,Y,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U1,debris,Seedling,471,Secondary,18.350015,-64.689327,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S2,fringe,Seedling,477,Quaternary,18.348123,-64.68984,A,A,P,B,19.2,0,G,0,0,0,0,0,Y,DECAP
+5/24/23,5/24/23,LU,Otter,April,23-Apr,2,69,U3,debris,Seedling,481,Secondary,18.3516,-64.691102,A,A,H,N,17.5,25,G,0,0,0,0,0,Y,"NEW, NO NODES OR LEAVES YET"
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,U3,debris,Seedling,481,Secondary,18.3516,-64.691102,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,CNL = COULD NOT LOCATE
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,U3,debris,Seedling,481,Secondary,18.3516,-64.691102,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S3,fringe,Seedling,483,Secondary,18.345588,-64.692545,A,A,H,N,37.3,0,G,0,4,7,0,0,Y,"FUNGUS ON LEAF, GROWING UNDERNEATH A ROCK"
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,S3,fringe,Seedling,483,Secondary,18.345588,-64.692545,DY,A,P,B,36.1,10,G,1,4,1,0,0,Y,"Herbivory, MSD"
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S3,fringe,Seedling,483,Secondary,18.345588,-64.692545,DY,A,P,B,34.2,0,GB,1,0,0,5,0,Y,BROWSE; DECAP
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S1,fringe,Seedling,498,Quaternary,18.349758,-64.691061,A,A,H,N,21,0,G,0,1,2,0,0,Y,
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Water,January,23-Jan,1,0,S1,fringe,Seedling,513,Primary,18.350259,-64.684177,A,A,P,I,21,4,G,0,2,4,0,0,,HERB
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S1,fringe,Seedling,513,Primary,18.350259,-64.684177,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,S1,fringe,Seedling,513,Primary,18.350259,-64.684177,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,removed tag
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S1,fringe,Seedling,513,Primary,18.350259,-64.684177,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Otter,January,23-Jan,1,0,S1,fringe,Seedling,530,Primary,18.349731,-64.691111,A,A,H,N,33.6,7.5,G,0,2,4,0,0,,
+4/2/23,4/2/23,LU,Otter,April,23-Apr,2,69,S1,fringe,Seedling,530,Primary,18.349731,-64.691111,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,S1,fringe,Seedling,530,Primary,18.349731,-64.691111,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,removed tag
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S1,fringe,Seedling,530,Primary,18.349731,-64.691111,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Otter,January,23-Jan,1,0,U1,debris,Seedling,532,Primary,18.34942,-64.692474,A,A,P,B,47.7,14,G,4,19,0,11,17,,HERB
+5/4/23,5/4/23,LU,Otter,April,23-Apr,2,69,U1,debris,Seedling,532,Primary,18.34942,-64.692474,A,A,H,N,49.9,3,B,2,27,7,17,23,Y,NO NEW MANGS AT QUAD
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,U1,debris,Seedling,532,Primary,18.34942,-64.692474,DY,A,P,B,47,28,B,2,25,8,17,13,Y,HERBIVORY- DEER?GOAT? OLD DECAP
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,U1,debris,Seedling,532,Primary,18.34942,-64.692474,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S1,fringe,Seedling,575,Secondary,18.350267,-64.689143,A,A,H,N,13.3,0,G,0,0,0,0,0,Y,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,S1,fringe,Seedling,575,Secondary,18.350267,-64.689143,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,removed tag
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S1,fringe,Seedling,575,Secondary,18.350267,-64.689143,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Water,January,23-Jan,1,0,S1,fringe,Seedling,582,Primary,18.350201,-64.689113,DY,A,W,N,42.9,29,G,2,1,0,5,0,,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S1,fringe,Seedling,582,Primary,18.350201,-64.689113,DY,A,W,N,39.6,9.5,B,1,1,0,5,0,Y,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,S1,fringe,Seedling,582,Primary,18.350201,-64.689113,DY,A,W,N,35.4,30,GB,1,1,0,1,0,Y,
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S1,fringe,Seedling,582,Primary,18.350201,-64.689113,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,U1,debris,Seedling,583,Tertiary,18.350024,64.689202,A,A,W,N,34.6,45.5,G,1,0,0,1,2,Y,NEW! DECAP
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U1,debris,Seedling,583,Tertiary,18.350024,64.689202,DY,A,W,N,34.6,18.5,G,0,0,0,0,0,Y,MSD
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Water,January,23-Jan,1,0,U1,debris,Seedling,584,Primary,18.34999,-64.689279,A,A,H,N,25.6,13,G,0,2,4,0,0,,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U1,debris,Seedling,584,Primary,18.34999,-64.689279,A,A,H,N,31.4,0,G,0,3,6,0,0,Y,
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,U1,debris,Seedling,584,Primary,18.34999,-64.689279,DY,A,W,B,24.2,17,G,1,2,0,1,2,Y,MSD
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U1,debris,Seedling,584,Primary,18.34999,-64.689279,DY,A,W,B,19.8,0,Y,2,2,0,4,3,Y,"MSD, MOST OF HYPOCOTYL DEAD"
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Water,January,23-Jan,1,0,S1,fringe,Seedling,585,Primary,18.350245,-64.689141,A,A,W,N,46.1,28,G,0,1,0,0,0,,
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S1,fringe,Seedling,585,Primary,18.350245,-64.689141,DY,A,W,N,45.9,9.83,B,0,4,0,0,0,Y,GALLS ON NODES
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,S1,fringe,Seedling,585,Primary,18.350245,-64.689141,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,removed tag
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S1,fringe,Seedling,585,Primary,18.350245,-64.689141,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+1/23/23,1/23/23,LU,Water,January,23-Jan,1,0,S3,fringe,Sapling,595,Primary,18.345543,-64.692566,A,A,H,N,NA,0,NA,NA,NA,NA,NA,NA,Y,"Too large to estimate height, sapling"
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,S3,fringe,Sapling,595,Primary,18.345543,-64.692566,A,A,H,N,NA,0,NA,NA,NA,NA,NA,NA,Y,"Too large to estimate height, sapling"
+8/24/23,8/24/23,LU,Water,August,23-Aug,3,143,S3,fringe,Tree,595,Primary,18.345543,-64.692566,A,A,H,N,NA,0,NA,NA,NA,NA,NA,NA,Y,Tree
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,S3,fringe,Tree,595,Primary,18.345543,-64.692566,A,A,H,N,NA,0,NA,NA,NA,NA,NA,NA,Y,Tree
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Otter,January,23-Jan,1,0,S1,fringe,Seedling,596,Primary,18.349744,-64.691086,A,A,H,N,27.7,9,G,NA,NA,NA,0,0,,NO PLUMMULE
+4/2/23,4/2/23,LU,Otter,April,23-Apr,2,69,S1,fringe,Seedling,596,Primary,18.349744,-64.691086,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,
+8/24/23,8/24/23,LU,Otter,August,23-Aug,3,143,S1,fringe,Seedling,596,Primary,18.349744,-64.691086,D,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,removed tag
+2/13/24,2/13/24,LU,Otter,February,24-Feb,4,174,S1,fringe,Seedling,596,Primary,18.349744,-64.691086,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,TAG WASHED UP ON SHORE
+1/23/23,1/23/23,"AJH, LU, AND, KWG",Water,January,23-Jan,1,0,U3,debris,Seedling,597,Primary,18.345196,-64.69076,A,A,P,I,32.5,26,G,0,4,5,0,0,,HERB (BITES)
+4/3/23,4/3/23,LU,Water,April,23-Apr,2,69,U3,debris,Seedling,597,Primary,18.345196,-64.69076,A,A,P,I,37.2,2,G,0,5,4,0,0,Y,"HERBIVORY (BITES, OR MAYBE FUNGUS)"
+8/23/23,8/23/23,LU,Water,August,23-Aug,3,143,U3,debris,Seedling,597,Primary,18.345196,-64.69076,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,CNL = COULD NOT LOCATE
+2/13/24,2/13/24,LU,Water,February,24-Feb,4,174,U3,debris,Seedling,597,Primary,18.345196,-64.69076,CNL,D,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,

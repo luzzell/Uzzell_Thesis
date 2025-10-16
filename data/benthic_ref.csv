@@ -1,0 +1,81 @@
+﻿Abbreviation,Definition,Category1,Category2
+H,hard bottom,Benthic Substrate,Hard Bottom
+HB,hard bottom,Benthic Substrate,Hard Bottom
+R,rubble,Benthic Substrate,Rubble
+S,sand/silt/leaf litter/detritus,Benthic Substrate,"Sand, etc."
+WD,Woody Debris,Benthic Substrate,Dead Mangrove
+P,prop root,Mangrove Substrate,Living Mangrove
+RHMAL,Living Red Mangrove,Branch/Tree (Mangrove Substrate),Living Mangrove
+RHMAD,Dead Red Mangrove,Branch/Tree Debris (Mangrove Substrate),Dead Mangrove
+DRHMA,Dead Red Mangrove,Branch/Tree Debris (Mangrove Substrate),Dead Mangrove
+LRHMA,Living Red Mangrove,Branch/Tree (Mangrove Substrate),Living Mangrove
+DICT,Dictyota sp,Green Alga,Macroalgae
+TURF,turf algae,Green Alga,Turf Algae
+PENA,Penicillus sp.,Green Alga,Macroalgae
+PENE,Penicillus sp.,Green Alga,Macroalgae
+UDOT,Udotea sp. ,Alga,Macroalgae
+VAVE,Valonia ventricosa,Bubble Alga,Macroalgae
+RAS,Red Algae Species,UNK Red Algae,Macroalgae
+JAAD,Jania adherens,Pink segmented red algae (tiny),Macroalgae
+GALA,Galaxaura sp.,Tubular thicket algae (larger),Macroalgae
+CCA,Crustose Coraline Alage,Crustose Coraline Alage,CCA
+THTE,Thalassia testudinum,Turtle seagrass,Seagrass
+HAST,Halophila stipulacea,Invasive seagrass,Seagrass
+VEVE,Ventricaria ventricosa,Sea Pearl,Macroalgae
+MILL,Millepora sp. ,Fire Coral,"Other, Living"
+AGEL,Agelas sp.,Sponge,Sponge
+MONA,Monachora sp. ,Sponge,Sponge
+ISAL,Isognomon alatus,Flat Tree Oyster,"Other, Living"
+APLY,Aplysina sp. ,Sponge,Sponge
+CHNU,Chondrilla nucula,Sponge,Sponge
+TUNI,Tunicate,Tunicate,"Other, Living"
+BARN,Barnacle,Barnacle,"Other, Living"
+CASE,Caulerpa sertularioides,Green Feather Alga,Macroalgae
+HALI,Halimeda sp.,Green Algae,Macroalgae
+CLIO,Cliona sp.,Sponge,Sponge
+COGI,Condylactis gigantea,Giant Anemone,"Other, Living"
+AMPH,Amphiroa sp. ,larger red alga,Macroalgae
+RAMI,Ramicrusta textilis,red alga,Macroalgae
+MDM,Marine Debris (Metal),Marine Debris (Metal),Marine Debris
+MDP,Marine Debris (Plastic),Marine Debris (Plastic),Marine Debris
+PICA,Pinna carnea (Amber Penshell),Amber Penshell,"Other, Living"
+CLCU,Clathria curacaoensis ,Sponge,Sponge
+AICR,Aiolochroia crassa,Sponge,Sponge
+CASP,Callyspongia sp.,Sponge,Sponge
+ENCRUST,Encrusting Algae,Encrusting Algae,Macroalgae
+LOVA,Lobophora variegata,"Brown Alga, leathery lobeweeds",Macroalgae
+ANEM,anemone,anemone,"Other, Living"
+DET,detritus,Detritus,"Sand, etc."
+DIAN,Diadema antelarium,black urchine,"Other, Living"
+SSID,Siderastrea siderea,coral,Coral
+OANN,Orbicella annularis,coral,Coral
+SPONGE2,See: UNK_ID,Sponge,Sponge
+ORBSP,Orbicella sp,coral,Coral
+SPONGE1,See: UNK_ID,Sponge,Sponge
+SPONGE3,See: UNK_ID,Sponge,Sponge
+SPONGE4,See: UNK_ID,Sponge,Sponge
+SPONGE5,See: UNK_ID,Sponge,Sponge
+SPONGE6,See: UNK_ID,Sponge,Sponge
+SPONGE7,See: UNK_ID,Sponge,Sponge
+SPONGE8,See: UNK_ID,Sponge,Sponge
+SPONGE9,See: UNK_ID,Sponge,Sponge
+SPONGE10,See: UNK_ID,Sponge,Sponge
+SPONGE11,See: UNK_ID,Sponge,Sponge
+SPONGE12,See: UNK_ID,Sponge,Sponge
+SPONGE13,See: UNK_ID,Sponge,Sponge
+SPONGE,See: UNK_ID,Sponge,Sponge
+ALGA,See: UNK_ID,Macroalgae,Macroalgae
+ALGA1,See: UNK_ID,Algae,Macroalgae
+ALGA2,See: UNK_ID,Algae,Macroalgae
+ALGA3,See: UNK_ID,Algae,Macroalgae
+ALGA4,See: UNK_ID,Algae,Macroalgae
+ALGA5,See: UNK_ID,TURF,Turf Algae
+LARA SEEDLING,white mangrove,mangrove seedling,Living Mangrove
+RHMA SEEDLING,red mangrove,mangrove seedling,Living Mangrove
+LARA PROP,white mangrove,mangrove seedling,Living Mangrove
+RHMA PROP,red mangrove,mangrove seedling,Living Mangrove
+LARA,white mangrove,mangrove seedling,Living Mangrove
+RHMA,red mangrove,mangrove seedling,Living Mangrove
+AVGE,black mangrove,mangrove seedling,Living Mangrove
+PPOR,Porites porites,coral,Coral
+PAST,Porites astreoides,coral,Coral
